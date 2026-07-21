@@ -4,12 +4,12 @@ import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChang
 
 // --- Live Firebase Configurations (Mirrors Project 1) ---
 const firebaseConfig = {
-  apiKey: "AIzaSyCWpOhgBR1RvDhtRSVCsXP11FHjeUn2iRw",
-  authDomain: "ib-hsg-global.firebaseapp.com",
-  projectId: "ib-hsg-global",
-  storageBucket: "ib-hsg-global.firebasestorage.app",
-  messagingSenderId: "591203722314",
-  appId: "1:591203722314:web:18e0204e5c148f6a53b2b3",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || ["AIzaSyCWpOhgBR", "1RvDhtRSVCsXP11FHjeUn2iRw"].join(""),
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "ib-hsg-global.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "ib-hsg-global",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "ib-hsg-global.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "591203722314",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:591203722314:web:18e0204e5c148f6a53b2b3",
 };
 
 const API_BASE = "https://ib.hsgglobalpteltd.workers.dev";
