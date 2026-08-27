@@ -12,6 +12,7 @@ export interface CatalogProduct {
   sku: string;
   display_name: string;
   image?: string;
+  thumbnail?: string;
   carton?: string;
   pallet_ctn?: string | number;
   storage_condition?: string;
@@ -41,22 +42,41 @@ export interface BrandInfo {
   [key: string]: any;
 }
 
-// Preload and convert an image URL to a clean base64 data URL with CORS handling
-async function loadImageAsDataUrl(url: string): Promise<string | null> {
+// Preload and convert an image URL to a clean compressed data URL (capped at 300px for high-speed PDF rendering)
+async function loadImageAsDataUrl(url: string, isLogo = false): Promise<string | null> {
   if (!url) return null;
   return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), 3500); // 3.5s fail-safe timeout
     const img = new Image();
     img.crossOrigin = "Anonymous";
     img.onload = () => {
+      clearTimeout(timer);
       try {
         const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth || 200;
-        canvas.height = img.naturalHeight || 200;
+        const maxDim = isLogo ? 320 : 260; // Lightweight max thumbnail size
+        let w = img.naturalWidth || maxDim;
+        let h = img.naturalHeight || maxDim;
+
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+
+        canvas.width = w;
+        canvas.height = h;
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.drawImage(img, 0, 0);
-          // Use image/png to preserve transparent background
-          resolve(canvas.toDataURL("image/png"));
+          if (!isLogo) {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, w, h);
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL(isLogo ? "image/png" : "image/jpeg", 0.85));
         } else {
           resolve(null);
         }
@@ -64,9 +84,18 @@ async function loadImageAsDataUrl(url: string): Promise<string | null> {
         resolve(null);
       }
     };
-    img.onerror = () => resolve(null);
+    img.onerror = () => {
+      clearTimeout(timer);
+      resolve(null);
+    };
     img.src = url;
   });
+}
+
+export interface PdfCustomOptions {
+  headerTitle?: string;
+  subtext?: string;
+  footerText?: string;
 }
 
 export async function generateExportCatalogPdf(
@@ -74,7 +103,8 @@ export async function generateExportCatalogPdf(
   brands: BrandInfo[],
   prospectName?: string,
   companyName?: string,
-  catalogHash?: string
+  catalogHash?: string,
+  customOptions?: PdfCustomOptions
 ) {
   const doc = new jsPDF({
     orientation: "portrait",
@@ -90,7 +120,7 @@ export async function generateExportCatalogPdf(
   const brandGroups: { [brandId: string]: CatalogProduct[] } = {};
 
   products.forEach((prod) => {
-    const bId = prod.brands_id || "HSG";
+    const bId = prod.brands_id || "BRAND_OTHER";
     if (!brandGroups[bId]) brandGroups[bId] = [];
     brandGroups[bId].push(prod);
   });
@@ -120,7 +150,7 @@ export async function generateExportCatalogPdf(
   let companyLogoBase64: string | null = null;
 
   await Promise.all([
-    loadImageAsDataUrl("/assets/logo/Logo.png").then((res) => {
+    loadImageAsDataUrl("/assets/logo/Logo.png", true).then((res) => {
       companyLogoBase64 = res;
     }),
     ...products.map(async (prod) => {
@@ -159,17 +189,24 @@ export async function generateExportCatalogPdf(
   doc.text("HSG GLOBAL PTE LTD", textStartX, 15);
 
   // Subtitle / Expo Badge
+  const headerTitle =
+    customOptions?.headerTitle ||
+    "FINE FOOD AUSTRALIA 2026 • OFFICIAL EXPORT PRODUCT CATALOG";
   doc.setFontSize(8.5);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(180, 140, 45); // Deep Gold
-  doc.text("FINE FOOD AUSTRALIA 2026 • OFFICIAL EXPORT PRODUCT CATALOG", textStartX, 21);
+  doc.text(headerTitle, textStartX, 21);
 
   // Contact Info & Export Terms
+  const subtext =
+    customOptions?.subtext ||
+    "Contact: sales@hsg-global.com | hsgglobal.sg\nSingapore • Malaysia • Australia • Global Foodservice & Retail FMCG | FOB / CIF Terms";
   doc.setFontSize(7.5);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(71, 85, 105); // Slate 600
-  doc.text("Contact: sales@hsg-global.com | hsgglobal.sg", textStartX, 27);
-  doc.text("Singapore • Malaysia • Australia • Global Foodservice & Retail FMCG | FOB / CIF Terms", textStartX, 32);
+
+  const subLines = doc.splitTextToSize(subtext, pageWidth - textStartX - 14);
+  doc.text(subLines, textStartX, 26.5);
 
   // Divider line under header
   doc.setDrawColor(226, 232, 240); // Slate 200
@@ -441,9 +478,13 @@ export async function generateExportCatalogPdf(
 
   // Global Footers on all pages
   const totalPages = doc.internal.pages.length - 1;
+  const footerLabel =
+    customOptions?.footerText ||
+    "Fine Food Australia 2026 Official Export Catalog";
+
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
-    const str = `Page ${i} of ${totalPages} | HSG Global Pte Ltd • Fine Food Australia 2026 Official Export Catalog • Inquiries: sales@hsg-global.com`;
+    const str = `Page ${i} of ${totalPages} | HSG Global Pte Ltd • ${footerLabel} • Inquiries: sales@hsg-global.com`;
     doc.setFontSize(7);
     doc.setTextColor(100, 116, 139);
     doc.text(str, pageWidth / 2, pageHeight - 8, { align: "center" });

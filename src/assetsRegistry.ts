@@ -7,7 +7,8 @@ export const localLogoImages = import.meta.glob('../public/assets/logo/*.{png,jp
 
 export function getCustomHeroImages(): string[] {
   const images: string[] = [];
-  for (const [_, rawUrl] of Object.entries(localHeroImages)) {
+  for (const [filePath, rawUrl] of Object.entries(localHeroImages)) {
+    if (filePath.includes('-blur')) continue;
     const url = typeof rawUrl === 'string' ? rawUrl : (rawUrl as any)?.default || '';
     if (url) images.push(url);
   }
