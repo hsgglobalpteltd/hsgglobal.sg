@@ -4349,8 +4349,78 @@ async function addNewPagePromptUnified(siteId, siteName, isMainSite) {
   openVisualBuilder(siteId, cleanPath, pageData);
 }
 
+// Inject page custom CSS into the editor canvas iframe
+function injectCanvasStyles() {
+  try {
+    if (!grapesEditor || !grapesEditor.Canvas) return;
+    const iframeDoc = grapesEditor.Canvas.getDocument();
+    if (iframeDoc && iframeDoc.head) {
+      let styleTag = iframeDoc.getElementById("gjs-custom-page-styles");
+      if (!styleTag) {
+        styleTag = iframeDoc.createElement("style");
+        styleTag.id = "gjs-custom-page-styles";
+        iframeDoc.head.appendChild(styleTag);
+      }
+      const activeCss = currentEditingPage?.css || "";
+      styleTag.innerHTML = `
+        ${activeCss}
+        details, details[open] {
+          display: block !important;
+        }
+        details:not([open]) > :not(summary) {
+          display: block !important;
+        }
+        summary {
+          cursor: text !important;
+          outline: none;
+        }
+      `;
+
+      // Expand all details in the canvas DOM
+      iframeDoc.querySelectorAll("details").forEach(d => {
+        d.open = true;
+      });
+
+      // Prevent native summary click toggle so double-click & text editing works smoothly on headings and summaries
+      if (!iframeDoc.__summaryClickBound) {
+        iframeDoc.__summaryClickBound = true;
+        iframeDoc.addEventListener("click", (e) => {
+          const summary = e.target && (e.target.tagName === "SUMMARY" ? e.target : e.target.closest("summary"));
+          if (summary) {
+            e.preventDefault();
+          }
+        }, true);
+      }
+    }
+  } catch (e) {
+    console.warn("injectCanvasStyles error:", e);
+  }
+}
+
+let grapesjsLoadingPromise = null;
+function loadGrapesJS() {
+  if (window.grapesjs) return Promise.resolve(window.grapesjs);
+  if (grapesjsLoadingPromise) return grapesjsLoadingPromise;
+
+  grapesjsLoadingPromise = new Promise((resolve, reject) => {
+    if (!document.getElementById("gjs-cdn-css")) {
+      const link = document.createElement("link");
+      link.id = "gjs-cdn-css";
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/grapesjs/dist/css/grapes.min.css";
+      document.head.appendChild(link);
+    }
+    const script = document.createElement("script");
+    script.src = "https://unpkg.com/grapesjs";
+    script.onload = () => resolve(window.grapesjs);
+    script.onerror = (err) => reject(err);
+    document.body.appendChild(script);
+  });
+  return grapesjsLoadingPromise;
+}
+
 // --- Visual Builder GrapesJS Integration ---
-function openVisualBuilder(siteId, pagePath, pageData) {
+async function openVisualBuilder(siteId, pagePath, pageData) {
   currentEditingPage = pageData;
   
   // Create editor DOM overlay
@@ -4374,10 +4444,14 @@ function openVisualBuilder(siteId, pagePath, pageData) {
     </div>
     <!-- Grapes Editor Content Area -->
     <div class="grapes-editor-content">
-      <div id="gjs"></div>
+      <div id="gjs"><div style="display:flex; height:100%; align-items:center; justify-content:center; color:#64748b; font-size:14px; font-weight:600;"><i class="fa-solid fa-spinner fa-spin" style="margin-right:8px;"></i> Loading Visual Builder...</div></div>
     </div>
   `;
   document.body.appendChild(overlay);
+
+  await loadGrapesJS();
+  const gjsContainer = document.getElementById("gjs");
+  if (gjsContainer) gjsContainer.innerHTML = "";
   
   // Initialize GrapesJS
   grapesEditor = grapesjs.init({
@@ -4395,6 +4469,46 @@ function openVisualBuilder(siteId, pagePath, pageData) {
         "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
       ]
     }
+  });
+
+  grapesEditor.on("load", injectCanvasStyles);
+  grapesEditor.on("canvas:frame:load", injectCanvasStyles);
+
+  // Enable direct inline text editing on FAQ <summary> and <details> elements by extending base types
+  grapesEditor.DomComponents.addType("details", {
+    extend: "default",
+    isComponent: el => el && el.tagName === "DETAILS",
+    model: {
+      defaults: {
+        tagName: "details",
+        droppable: true,
+        attributes: { open: "true" }
+      }
+    }
+  });
+
+  grapesEditor.DomComponents.addType("summary", {
+    extend: "text",
+    isComponent: el => el && el.tagName === "SUMMARY",
+    model: {
+      defaults: {
+        tagName: "summary",
+        type: "text",
+        droppable: false,
+        editable: true
+      }
+    }
+  });
+
+  grapesEditor.on("component:selected component:add", () => {
+    try {
+      const iframeDoc = grapesEditor.Canvas.getDocument();
+      if (iframeDoc) {
+        iframeDoc.querySelectorAll("details").forEach(d => {
+          d.open = true;
+        });
+      }
+    } catch {}
   });
 
   grapesEditor.DomComponents.addType("store-map", {
@@ -4571,9 +4685,13 @@ function openVisualBuilder(siteId, pagePath, pageData) {
     }
   });
   
-  // Load page HTML and CSS directly into GrapesJS canvas
+  // Always load cleanly from HTML and CSS so GrapesJS creates native browser-editable components
   grapesEditor.setComponents(pageData.html || "");
   grapesEditor.setStyle(pageData.css || "");
+
+  injectCanvasStyles();
+  setTimeout(injectCanvasStyles, 250);
+  setTimeout(injectCanvasStyles, 800);
   
   builderHasUnsavedChanges = false;
   grapesEditor.on("component:add component:remove component:update style:update", () => {
@@ -4587,15 +4705,15 @@ function openVisualBuilder(siteId, pagePath, pageData) {
   bm.add("container-block", {
     label: "<div style='text-align:center;'><i class='fa-regular fa-square' style='font-size:20px;'></i><div style='font-size:10px; margin-top:4px;'>Container</div></div>",
     category: "Layout",
-    content: `<div style="padding: 40px 20px; min-height: 150px; background-color: #f9fafb; border: 1px dashed #d1d5db; box-sizing: border-box; border-radius: 6px;"></div>`
+    content: `<div style="min-height: 80px; padding: 20px; box-sizing: border-box; width: 100%;"></div>`
   });
 
   bm.add("column-block", {
     label: "<div style='text-align:center;'><i class='fa-solid fa-columns' style='font-size:20px;'></i><div style='font-size:10px; margin-top:4px;'>Column</div></div>",
     category: "Layout",
-    content: `<div style="display: flex; gap: 20px; padding: 20px; box-sizing: border-box; flex-wrap: wrap;">
-                <div style="flex: 1; min-width: 200px; padding: 20px; border: 1px dashed #d1d5db; border-radius: 6px; min-height: 100px;">Column 1</div>
-                <div style="flex: 1; min-width: 200px; padding: 20px; border: 1px dashed #d1d5db; border-radius: 6px; min-height: 100px;">Column 2</div>
+    content: `<div style="display: flex; width: 100%; box-sizing: border-box; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 160px; min-height: 80px; box-sizing: border-box;"></div>
+                <div style="flex: 1; min-width: 160px; min-height: 80px; box-sizing: border-box;"></div>
               </div>`
   });
 
@@ -4616,7 +4734,7 @@ function openVisualBuilder(siteId, pagePath, pageData) {
     label: "<div style='text-align:center;'><i class='fa-solid fa-bars' style='font-size:20px;'></i><div style='font-size:10px; margin-top:4px;'>Menu / Nav</div></div>",
     category: "Components",
     content: `
-      <nav style="display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; background: #ffffff; border-bottom: 1px solid #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; box-sizing: border-box; flex-wrap: wrap; gap: 16px;">
+      <nav style="display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; background-color: #ffffff; border-bottom: 1px solid #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; box-sizing: border-box; flex-wrap: wrap; gap: 16px;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <div style="width: 32px; height: 32px; border-radius: 8px; background: #0B57D0; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">B</div>
           <span style="font-size: 16px; font-weight: 700; color: #0f172a;">Brand Logo</span>
@@ -4802,16 +4920,16 @@ function openVisualBuilder(siteId, pagePath, pageData) {
       <div class="ib-faq-wrapper" style="max-width: 680px; margin: 40px auto; padding: 0 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
         <h3 style="font-size: 22px; font-weight: 700; color: #0f172a; text-align: center; margin-bottom: 24px;">Frequently Asked Questions</h3>
         <div style="display: flex; flex-direction: column; gap: 12px;">
-          <details style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; background: #ffffff; cursor: pointer;">
-            <summary style="font-size: 14px; font-weight: 600; color: #1e293b; outline: none;">Where can I buy these products in Singapore?</summary>
+          <details open style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; background-color: #ffffff; cursor: pointer;">
+            <summary style="font-size: 14px; font-weight: 600; color: #1e293b; outline: none; user-select: text;">Where can I buy these products in Singapore?</summary>
             <p style="font-size: 13px; color: #64748b; line-height: 1.6; margin-top: 10px; margin-bottom: 0;">Our products are widely available at FairPrice, Sheng Siong, Prime Supermarket, and leading Asian grocers islandwide. Check our interactive Store Map above for live stock availability.</p>
           </details>
-          <details style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; background: #ffffff; cursor: pointer;">
-            <summary style="font-size: 14px; font-weight: 600; color: #1e293b; outline: none;">Are your food products Halal certified?</summary>
+          <details open style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; background-color: #ffffff; cursor: pointer;">
+            <summary style="font-size: 14px; font-weight: 600; color: #1e293b; outline: none; user-select: text;">Are your food products Halal certified?</summary>
             <p style="font-size: 13px; color: #64748b; line-height: 1.6; margin-top: 10px; margin-bottom: 0;">Yes, all our food items are prepared in accordance with strict international standards and certified Halal by authorized bodies.</p>
           </details>
-          <details style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; background: #ffffff; cursor: pointer;">
-            <summary style="font-size: 14px; font-weight: 600; color: #1e293b; outline: none;">How do I inquire about wholesale or restaurant distribution?</summary>
+          <details open style="border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 18px; background-color: #ffffff; cursor: pointer;">
+            <summary style="font-size: 14px; font-weight: 600; color: #1e293b; outline: none; user-select: text;">How do I inquire about wholesale or restaurant distribution?</summary>
             <p style="font-size: 13px; color: #64748b; line-height: 1.6; margin-top: 10px; margin-bottom: 0;">Please use the contact form on this page or message us directly via WhatsApp to discuss trade pricing and carton deliveries.</p>
           </details>
         </div>
@@ -4828,7 +4946,7 @@ function openVisualBuilder(siteId, pagePath, pageData) {
       content: `
         <div class="ib-partner-logos-container" data-partner-logos='[]' style="padding: 40px 20px; display: flex; justify-content: center; align-items: center; min-height: 120px; width: 100%; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
           <div class="ib-partner-logos-cloud" style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 28px 36px; max-width: 1000px; width: 100%; margin: 0 auto;">
-            <div style="padding: 20px 32px; border: 1.5px dashed #cbd5e1; border-radius: 12px; color: #64748b; font-size: 13px; font-weight: 600; text-align: center; background: #f8fafc;">
+            <div style="padding: 20px 32px; border: 1.5px dashed #cbd5e1; border-radius: 12px; color: #64748b; font-size: 13px; font-weight: 600; text-align: center; background-color: #f8fafc;">
               <i class="fa-solid fa-handshake" style="margin-right: 6px; color: #0B57D0; font-size: 16px;"></i> Partner Logos Cloud (Click '⚙ Configure Partner Logos' in Component Settings or double-click to add logo PNGs)
             </div>
           </div>
@@ -4842,15 +4960,15 @@ function openVisualBuilder(siteId, pagePath, pageData) {
     label: "<div style='text-align:center;'><i class='fa-solid fa-comments' style='font-size:20px;'></i><div style='font-size:10px; margin-top:4px;'>Reviews</div></div>",
     category: "Components",
     content: `
-      <section style="padding: 40px 20px; background: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; border-radius: 12px; margin: 30px 0;">
+      <section style="padding: 40px 20px; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; border-radius: 12px; margin: 30px 0;">
         <h3 style="font-size: 22px; font-weight: 700; color: #0f172a; text-align: center; margin-bottom: 24px;">Loved By Home Cooks & Chefs</h3>
         <div style="display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; max-width: 900px; margin: 0 auto;">
-          <div style="flex: 1; min-width: 260px; background: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+          <div style="flex: 1; min-width: 260px; background-color: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
             <div style="color: #f59e0b; margin-bottom: 8px;"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i></div>
             <p style="font-size: 13px; color: #475569; font-style: italic; line-height: 1.5;">"The authentic taste saves so much cooking time. My family loves every meal made with these pastes!"</p>
             <span style="font-size: 12px; font-weight: 700; color: #1e293b;">— Michelle T., Singapore</span>
           </div>
-          <div style="flex: 1; min-width: 260px; background: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+          <div style="flex: 1; min-width: 260px; background-color: #ffffff; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
             <div style="color: #f59e0b; margin-bottom: 8px;"><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i></div>
             <p style="font-size: 13px; color: #475569; font-style: italic; line-height: 1.5;">"Consistent quality and great aroma. Excellent for commercial kitchen prep as well."</p>
             <span style="font-size: 12px; font-weight: 700; color: #1e293b;">— Chef Dave K., SG Catering</span>
@@ -4865,7 +4983,7 @@ function openVisualBuilder(siteId, pagePath, pageData) {
     label: "<div style='text-align:center;'><i class='fa-solid fa-shoe-prints' style='font-size:20px;'></i><div style='font-size:10px; margin-top:4px;'>Footer</div></div>",
     category: "Layout",
     content: `
-      <footer style="background: #0f172a; color: #94a3b8; padding: 48px 32px 24px 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+      <footer style="background-color: #0f172a; color: #94a3b8; padding: 48px 32px 24px 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
         <div style="display: flex; justify-content: space-between; gap: 32px; flex-wrap: wrap; max-width: 1100px; margin: 0 auto; padding-bottom: 32px; border-bottom: 1px solid #334155;">
           <div style="max-width: 320px;">
             <h4 style="color: #ffffff; font-size: 18px; margin-top: 0; margin-bottom: 10px;">Brand Showcase</h4>
@@ -4929,7 +5047,7 @@ function openVisualBuilder(siteId, pagePath, pageData) {
     content: `<header style="padding: 80px 20px; text-align: center; background-color: #0B57D0; color: white; font-family: sans-serif;">
                 <h1 style="font-size: 40px; font-weight: 800; margin-bottom:12px;">Stunning Headline</h1>
                 <p style="font-size: 16px; opacity: 0.9; margin-bottom:24px; max-width: 600px; margin-left: auto; margin-right: auto;">Provide some interesting subtitle describing your brand value proposition and product quality.</p>
-                <a href="#stores" style="background:#ffffff; color:#0B57D0; text-decoration:none; padding:12px 28px; border-radius:8px; font-weight:700; font-size:14px; display:inline-block;">Find In Stores</a>
+                <a href="#stores" style="background-color:#ffffff; color:#0B57D0; text-decoration:none; padding:12px 28px; border-radius:8px; font-weight:700; font-size:14px; display:inline-block;">Find In Stores</a>
               </header>`,
   });
 
@@ -4937,12 +5055,12 @@ function openVisualBuilder(siteId, pagePath, pageData) {
     label: "<div style='text-align:center;'><i class='fa-solid fa-list-check' style='font-size:20px;'></i><div style='font-size:10px; margin-top:4px;'>Features</div></div>",
     category: "Components",
     content: `<div style="display: flex; gap: 20px; padding: 40px 20px; font-family: sans-serif; justify-content: space-around; flex-wrap: wrap;">
-                <div style="flex: 1; min-width: 250px; text-align: center; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff;">
+                <div style="flex: 1; min-width: 250px; text-align: center; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
                   <i class="fa-solid fa-bolt" style="font-size: 32px; color: #0B57D0; margin-bottom: 12px;"></i>
                   <h3 style="margin-bottom: 8px; font-weight: 700;">Fast Delivery</h3>
                   <p style="color: #6b7280; font-size:14px;">Instant restock cycles and direct islandwide distribution.</p>
                 </div>
-                <div style="flex: 1; min-width: 250px; text-align: center; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff;">
+                <div style="flex: 1; min-width: 250px; text-align: center; padding: 24px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
                   <i class="fa-solid fa-shield-halved" style="font-size: 32px; color: #10b981; margin-bottom: 12px;"></i>
                   <h3 style="margin-bottom: 8px; font-weight: 700;">Premium Quality</h3>
                   <p style="color: #6b7280; font-size:14px;">Strictly audited production standards and fresh ingredients.</p>
@@ -5024,9 +5142,11 @@ function openVisualBuilder(siteId, pagePath, pageData) {
     publishBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Updating...`;
 
     const html = grapesEditor.getHtml();
-    let css = grapesEditor.getCss() || "";
-    if (currentEditingPage && currentEditingPage.css && !css.includes(".site-navbar")) {
-      css = currentEditingPage.css + "\n" + css;
+    let baseCss = (currentEditingPage && currentEditingPage.css) ? currentEditingPage.css : "";
+    let gjsCss = grapesEditor.getCss() || "";
+    let css = baseCss;
+    if (gjsCss && !baseCss.includes(gjsCss)) {
+      css = baseCss + "\n" + gjsCss;
     }
     const json = JSON.stringify(grapesEditor.getProjectData());
 
@@ -5051,6 +5171,8 @@ function openVisualBuilder(siteId, pagePath, pageData) {
 
       if (res.ok) {
         currentEditingPage.published = publishState ? 1 : 0;
+        currentEditingPage.html = html;
+        currentEditingPage.css = css;
         updatePublishButtonState(publishState);
         showToast(publishState ? "Page published successfully!" : "Page unpublished successfully!");
       } else {
@@ -5250,9 +5372,11 @@ async function saveBuilderData(siteId, pagePath, newPagePath) {
   saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
   
   const html = grapesEditor.getHtml();
-  let css = grapesEditor.getCss() || "";
-  if (currentEditingPage && currentEditingPage.css && !css.includes(".site-navbar")) {
-    css = currentEditingPage.css + "\n" + css;
+  let baseCss = (currentEditingPage && currentEditingPage.css) ? currentEditingPage.css : "";
+  let gjsCss = grapesEditor.getCss() || "";
+  let css = baseCss;
+  if (gjsCss && !baseCss.includes(gjsCss)) {
+    css = baseCss + "\n" + gjsCss;
   }
   const json = JSON.stringify(grapesEditor.getProjectData());
   
@@ -5278,6 +5402,10 @@ async function saveBuilderData(siteId, pagePath, newPagePath) {
     
     if (res.ok) {
       builderHasUnsavedChanges = false;
+      if (currentEditingPage) {
+        currentEditingPage.html = html;
+        currentEditingPage.css = css;
+      }
       showToast("Page layout saved successfully!");
       if (newPagePath) {
         return { success: true, page_path: newPagePath };
@@ -5300,13 +5428,6 @@ async function saveBuilderData(siteId, pagePath, newPagePath) {
 // --- Public Visitor Site Rendering Core ---
 async function renderPublicSiteView(siteId, pagePath) {
   const app = document.getElementById("app");
-  if (!document.getElementById("app-loader")) {
-    app.innerHTML = `
-      <div id="app-loader" style="display:flex; height:100vh; align-items:center; justify-content:center; background:var(--bg-primary); box-sizing:border-box;">
-        <div style="width: 32px; height: 32px; border: 4px solid rgba(11,87,208,0.1); border-left-color: var(--accent-color); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-      </div>
-    `;
-  }
   
   try {
     let targetSiteId = siteId || "main";
