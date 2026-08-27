@@ -1,0 +1,167 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #f8fafc;
+    color: #1e293b;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+}
+
+/* Subtle Traditional Asian / Batik Motif SVG Background Patterns */
+.bg-batik-hero {
+  background-color: #0d121c;
+  background-image: 
+    radial-gradient(circle at 50% 30%, rgba(212, 175, 55, 0.08) 0%, transparent 70%),
+    url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4af37' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3Ccircle cx='30' cy='30' r='3'/%3E%3Ccircle cx='0' cy='0' r='3'/%3E%3Ccircle cx='60' cy='0' r='3'/%3E%3Ccircle cx='0' cy='60' r='3'/%3E%3Ccircle cx='60' cy='60' r='3'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+.bg-batik-light {
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg width='52' height='52' viewBox='0 0 52 52' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%2394a3b8' fill-opacity='0.06' fill-rule='evenodd'%3E%3Cpath d='M0 0h52v52H0V0zm26 26l13 13-13 13-13-13 13-13zM0 26l13-13L0 0v26zm0 26l13-13L0 26v26zm26 0l13-13 13 13H26zM52 0L39 13l13 13V0z'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.bg-batik-cream {
+  background-color: #f8fafc;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23cbd5e1' fill-opacity='0.12' fill-rule='evenodd'%3E%3Cpath d='M30 30L0 0h60L30 30zM0 60l30-30 30 30H0z'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.bg-batik-card-dark {
+  background-color: rgba(22, 30, 48, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+/* Malaysian Batik Terengganu Floral Foliage Footer Motif */
+.bg-batik-footer {
+  background-color: #07090e;
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.15) 0%, transparent 60%),
+    url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23d4af37' fill-opacity='0.08' fill-rule='evenodd'%3E%3Cpath d='M40 0c6 10 15 15 25 15-10 6-15 15-15 25-6-10-15-15-25-15 10-6 15-15 15-25zm0 40c6 10 15 15 25 15-10 6-15 15-15 25-6-10-15-15-25-15 10-6 15-15 15-25zM0 20c6 10 15 15 25 15-10 6-15 15-15 25-6-10-15-15-25-15 10-6 15-15 15-25zm80 0c6 10 15 15 25 15-10 6-15 15-15 25-6-10-15-15-25-15 10-6 15-15 15-25z'/%3E%3Ccircle cx='40' cy='20' r='4' fill='%23d4af37' fill-opacity='0.06'/%3E%3Ccircle cx='40' cy='60' r='4' fill='%23d4af37' fill-opacity='0.06'/%3E%3Ccircle cx='0' cy='40' r='4' fill='%23d4af37' fill-opacity='0.06'/%3E%3Ccircle cx='80' cy='40' r='4' fill='%23d4af37' fill-opacity='0.06'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.batik-gold-ribbon {
+  height: 4px;
+  background: linear-gradient(90deg, #78350f 0%, #d4af37 35%, #fef08a 50%, #d4af37 65%, #78350f 100%);
+}
+
+.bg-light-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+}
+
+.bg-light-card-gold {
+  background-color: #ffffff;
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  box-shadow: 0 10px 30px -5px rgba(212, 175, 55, 0.12), 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* Custom Gold Shimmer */
+.gold-gradient-text {
+  background: linear-gradient(135deg, #fef08a 0%, #d4af37 50%, #b45309 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-gradient-dark {
+  background: linear-gradient(135deg, #b45309 0%, #d4af37 50%, #92400e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Smooth horizontal marquee animations */
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  display: flex;
+  width: max-content;
+  animation: marquee 30s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+.animate-marquee-banner {
+  display: flex;
+  width: max-content;
+  animation: marquee 16s linear infinite;
+}
+
+/* 30-Second Rising Liquid Wave Animation (Ultra-Smooth 0% to 100%) */
+@keyframes riseWave30s {
+  0% {
+    height: 0%;
+  }
+  96% {
+    height: 100%;
+  }
+  99.5% {
+    height: 100%;
+  }
+  100% {
+    height: 0%;
+  }
+}
+
+@keyframes waveHorizontalRoll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.wave-container-rising {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 0%;
+  overflow: hidden;
+  animation: riseWave30s 30s linear infinite;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.wave-crest-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  height: 8px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 20'%3E%3Cpath fill='%23c29b27' d='M0 10 Q 50 0 100 10 T 200 10 T 300 10 T 400 10 L 400 20 L 0 20 Z'/%3E%3C/svg%3E");
+  background-size: 200px 8px;
+  background-repeat: repeat-x;
+  animation: waveHorizontalRoll 2.4s linear infinite;
+  z-index: 1;
+}
+
+.wave-crest-front {
+  position: absolute;
+  top: 1px;
+  left: 0;
+  width: 200%;
+  height: 8px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 20'%3E%3Cpath fill='%23d4af37' d='M0 10 Q 50 20 100 10 T 200 10 T 300 10 T 400 10 L 400 20 L 0 20 Z'/%3E%3C/svg%3E");
+  background-size: 200px 8px;
+  background-repeat: repeat-x;
+  animation: waveHorizontalRoll 1.4s linear infinite reverse;
+  z-index: 2;
+}
+
+.wave-body {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #d4af37;
+  z-index: 2;
+}

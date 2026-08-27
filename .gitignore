@@ -1,6 +1,14 @@
 node_modules
 dist
-.env
-.env.local
+dist-ssr
+*.local
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
-*.log
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.tsbuildinfo
