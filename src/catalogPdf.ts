@@ -42,47 +42,132 @@ export interface BrandInfo {
   [key: string]: any;
 }
 
-// Preload and convert an image URL to a clean compressed data URL (capped at 300px for high-speed PDF rendering)
+// Helper: Extract prioritized candidate URLs for a product image
+function getProductCandidateUrls(prod: CatalogProduct): string[] {
+  const meta = prod.product_meta || {};
+  const candidates: string[] = [];
+
+  const rawThumb = prod.thumbnail;
+  const rawImage = prod.image || (meta.Images && meta.Images[0]) || "";
+
+  if (rawThumb) candidates.push(rawThumb);
+
+  if (rawImage) {
+    if (rawImage.includes("i.imgur.com/")) {
+      const clean = rawImage.replace(/([sbtml])\.(png|jpg|jpeg|webp)$/i, ".$2");
+      candidates.push(clean.replace(/(\.[a-zA-Z0-9]+)$/, "m$1")); // 320x320 fast thumbnail
+      candidates.push(clean.replace(/(\.[a-zA-Z0-9]+)$/, "l$1")); // 640x640 thumbnail
+      candidates.push(rawImage);
+    } else {
+      candidates.push(rawImage);
+    }
+  }
+
+  return candidates.filter(Boolean);
+}
+
+// Preload and convert an image URL to a clean compressed data URL (capped at 260px for high-speed PDF rendering)
 async function loadImageAsDataUrl(url: string, isLogo = false): Promise<string | null> {
   if (!url) return null;
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), 3500); // 3.5s fail-safe timeout
+
+  const maxDim = isLogo ? 320 : 260;
+
+  // Helper to draw an image/bitmap to canvas and export clean data URL
+  const imgToDataUrl = (img: HTMLImageElement | ImageBitmap): string | null => {
+    try {
+      const canvas = document.createElement("canvas");
+      let w = "naturalWidth" in img ? img.naturalWidth : img.width;
+      let h = "naturalHeight" in img ? img.naturalHeight : img.height;
+      if (!w || !h) return null;
+
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+
+      if (!isLogo) {
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, w, h);
+      }
+      ctx.drawImage(img, 0, 0, w, h);
+      return canvas.toDataURL(isLogo ? "image/png" : "image/jpeg", 0.85);
+    } catch {
+      return null;
+    }
+  };
+
+  // 1. Try fetch approach with backend CORS proxy fallback
+  const tryFetchToDataUrl = async (targetUrl: string): Promise<string | null> => {
+    try {
+      let res: Response | null = null;
+      try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 6000);
+        res = await fetch(targetUrl, { signal: controller.signal });
+        clearTimeout(t);
+      } catch {}
+
+      // If direct fetch failed or was blocked by CORS, try through Cloudflare Worker proxy
+      if (!res || !res.ok) {
+        if (targetUrl.startsWith("http")) {
+          const proxyUrl = `https://ib-v2.hsgglobalpteltd.workers.dev/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+          const controller = new AbortController();
+          const t = setTimeout(() => controller.abort(), 8000);
+          res = await fetch(proxyUrl, { signal: controller.signal });
+          clearTimeout(t);
+        }
+      }
+
+      if (res && res.ok) {
+        const blob = await res.blob();
+        if (typeof createImageBitmap === "function") {
+          try {
+            const bitmap = await createImageBitmap(blob);
+            const dataUrl = imgToDataUrl(bitmap);
+            bitmap.close();
+            if (dataUrl) return dataUrl;
+          } catch {}
+        }
+
+        return new Promise<string | null>((resolve) => {
+          const objectUrl = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(imgToDataUrl(img));
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            resolve(null);
+          };
+          img.src = objectUrl;
+        });
+      }
+    } catch {}
+    return null;
+  };
+
+  const fetched = await tryFetchToDataUrl(url);
+  if (fetched) return fetched;
+
+  // 2. Direct HTML Image element fallback
+  return new Promise<string | null>((resolve) => {
+    const timer = setTimeout(() => resolve(null), 6000);
     const img = new Image();
     img.crossOrigin = "Anonymous";
     img.onload = () => {
       clearTimeout(timer);
-      try {
-        const canvas = document.createElement("canvas");
-        const maxDim = isLogo ? 320 : 260; // Lightweight max thumbnail size
-        let w = img.naturalWidth || maxDim;
-        let h = img.naturalHeight || maxDim;
-
-        if (w > maxDim || h > maxDim) {
-          if (w > h) {
-            h = Math.round((h * maxDim) / w);
-            w = maxDim;
-          } else {
-            w = Math.round((w * maxDim) / h);
-            h = maxDim;
-          }
-        }
-
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          if (!isLogo) {
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, w, h);
-          }
-          ctx.drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL(isLogo ? "image/png" : "image/jpeg", 0.85));
-        } else {
-          resolve(null);
-        }
-      } catch (err) {
-        resolve(null);
-      }
+      resolve(imgToDataUrl(img));
     };
     img.onerror = () => {
       clearTimeout(timer);
@@ -145,22 +230,30 @@ export async function generateExportCatalogPdf(
     });
   }
 
-  // 2. Preload 1:1 image Data URLs for all products & Company Logo
+  // 2. Preload 1:1 image Data URLs for all products & Company Logo (in batches of 8 for optimal performance)
   const productImagesMap: { [sku: string]: string | null } = {};
   let companyLogoBase64: string | null = null;
 
-  await Promise.all([
-    loadImageAsDataUrl("/assets/logo/Logo.png", true).then((res) => {
-      companyLogoBase64 = res;
-    }),
-    ...products.map(async (prod) => {
-      const meta = prod.product_meta || {};
-      const imgUrl = prod.image || (meta.Images && meta.Images[0]) || "";
-      if (imgUrl) {
-        productImagesMap[prod.sku] = await loadImageAsDataUrl(imgUrl);
-      }
-    })
-  ]);
+  await loadImageAsDataUrl("/assets/logo/Logo.png", true).then((res) => {
+    companyLogoBase64 = res;
+  });
+
+  const BATCH_SIZE = 8;
+  for (let i = 0; i < products.length; i += BATCH_SIZE) {
+    const batch = products.slice(i, i + BATCH_SIZE);
+    await Promise.all(
+      batch.map(async (prod) => {
+        const candidateUrls = getProductCandidateUrls(prod);
+        for (const cUrl of candidateUrls) {
+          const dataUrl = await loadImageAsDataUrl(cUrl);
+          if (dataUrl) {
+            productImagesMap[prod.sku] = dataUrl;
+            break;
+          }
+        }
+      })
+    );
+  }
 
   // 3. FRONT COVER / CLEAN WHITE PRINT HEADER
   // Header container
@@ -287,7 +380,17 @@ export async function generateExportCatalogPdf(
         else if (skuLower.includes("400g") || skuLower.includes("200g")) ctnPerPlt = "96";
       }
 
-      const weight = item.carton_weight ? `${item.carton_weight} kg` : "-";
+      let weight = "-";
+      if (item.carton_weight) {
+        const numWeight = Number(item.carton_weight);
+        if (!isNaN(numWeight) && numWeight > 0) {
+          // If in database as grams (e.g. >= 100), convert to kg (e.g. 5600g -> 5.6 kg)
+          const inKg = numWeight >= 100 ? (numWeight / 1000).toFixed(2).replace(/\.?0+$/, '') : numWeight.toString();
+          weight = `${inKg} kg`;
+        } else {
+          weight = `${item.carton_weight}`;
+        }
+      }
 
       const dimParts: string[] = [];
       if (item.carton_l_mm) dimParts.push(`${(Number(item.carton_l_mm) / 10).toFixed(1).replace(/\.0$/, '')}`);
