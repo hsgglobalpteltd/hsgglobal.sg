@@ -24,7 +24,8 @@ import {
   Layers,
   RefreshCw,
   Utensils,
-  Truck
+  Truck,
+  ArrowUpRight
 } from 'lucide-react';
 import {
   getActiveBrandLogos,
@@ -33,6 +34,7 @@ import {
   getAppLogos
 } from './assetsRegistry';
 import { generateExportCatalogPdf, CatalogProduct, BrandInfo } from './catalogPdf';
+import { ChatAssist } from './ChatAssist';
 
 // Helper: Convert product image URL into 1:1 450px lightweight thumbnail (~20KB)
 function getSquare450Thumbnail(url?: string): string {
@@ -396,23 +398,16 @@ export default function App() {
   const [catalogHash, setCatalogHash] = useState<string>('');
   const [cachedPdfUrl, setCachedPdfUrl] = useState<string | null>(null);
 
-  // Helper for fast trigger download
+  // Helper for fast trigger download directly from backend / R2 cache
   const handleDownloadCatalog = (prospectName?: string, companyName?: string) => {
-    if (cachedPdfUrl) {
-      const link = document.createElement('a');
-      link.href = cachedPdfUrl;
-      link.download = 'HSG_Global_Official_Export_Catalog.pdf';
-      link.target = '_blank';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      generateExportCatalogPdf(products, brands, prospectName, companyName, catalogHash, {
-        headerTitle: (layoutConfig as any).pdf_header_title,
-        subtext: (layoutConfig as any).pdf_subtext,
-        footerText: (layoutConfig as any).pdf_footer_text
-      });
-    }
+    const downloadEndpoint = cachedPdfUrl || 'https://ib-v2.hsgglobalpteltd.workers.dev/api/exhibitor/download-catalog-pdf';
+    const link = document.createElement('a');
+    link.href = downloadEndpoint;
+    link.download = 'HSG_Global_Official_Export_Catalog.pdf';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   useEffect(() => {
@@ -1092,10 +1087,10 @@ export default function App() {
               {visibleRowCount === 1 ? (
                 <button
                   onClick={handleSeeMoreProducts}
-                  className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white font-bold px-8 py-3.5 rounded-xl text-sm transition-all shadow-md hover:shadow-lg active:scale-98 cursor-pointer border border-slate-700 group"
+                  className="inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 font-bold px-7 py-3 rounded-xl text-xs uppercase tracking-wider transition-all border border-slate-300 hover:border-slate-400 active:scale-98 cursor-pointer shadow-xs group"
                 >
                   <span>See More Products</span>
-                  <ChevronDown className="w-4 h-4 group-hover:translate-y-0.5 transition-transform" />
+                  <ChevronDown className="w-4 h-4 text-slate-500 group-hover:text-slate-800 group-hover:translate-y-0.5 transition-transform" />
                 </button>
               ) : (
                 <div className="w-full max-w-xl mx-auto">
@@ -1147,8 +1142,16 @@ export default function App() {
                     </p>
                   )}
 
-                  <p className="text-[11px] text-slate-500 mt-2.5">
-                    Instant PDF download with full carton specs, pallet loading &amp; shelf-life details.
+                  <p className="text-[11px] text-slate-500 mt-2.5 flex items-center justify-center gap-1.5 flex-wrap">
+                    <span>Instant PDF download with full carton specs, pallet loading &amp; shelf-life details.</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadCatalog()}
+                      className="font-semibold text-amber-700 hover:text-amber-900 underline underline-offset-2 hover:no-underline transition-colors cursor-pointer inline-flex items-center gap-0.5"
+                      title="Direct download catalog without email"
+                    >
+                      (Skip &amp; Download Direct)
+                    </button>
                   </p>
                 </div>
               )}
@@ -1250,7 +1253,7 @@ export default function App() {
               <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
                   onClick={() => handleDownloadCatalog(formData.name, formData.company)}
-                  className="bg-[#d4af37] text-black font-bold px-6 py-3 rounded-xl text-xs uppercase flex items-center gap-2 hover:bg-amber-400 transition-all cursor-pointer shadow-md"
+                  className="bg-[#d4af37] text-white font-bold px-6 py-3 rounded-xl text-xs uppercase flex items-center gap-2 hover:bg-amber-400 transition-all cursor-pointer shadow-md"
                 >
                   <Download className="w-4 h-4" />
                   Re-Download PDF
@@ -1284,7 +1287,7 @@ export default function App() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="h-12 px-6 bg-gradient-to-r from-amber-600 via-[#d4af37] to-amber-600 hover:from-amber-500 hover:to-amber-600 text-black font-extrabold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-75 cursor-pointer text-xs uppercase tracking-wider shrink-0"
+                    className="h-12 px-6 bg-gradient-to-r from-amber-600 via-[#d4af37] to-amber-600 hover:from-amber-500 hover:to-amber-600 text-white font-extrabold rounded-xl shadow-md flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-75 cursor-pointer text-xs uppercase tracking-wider shrink-0"
                   >
                     <Download className={`w-4 h-4 ${isSubmitting ? 'animate-bounce' : ''}`} />
                     <span>Download Catalog</span>
@@ -1473,6 +1476,19 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="flex items-center gap-3 shrink-0">
+                <a
+                  href="https://order.hsgglobal.sg/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-200 hover:text-white border border-white/15 hover:border-[#d4af37]/50 text-xs font-semibold tracking-wide transition-all shadow-sm active:scale-95 group"
+                  title="Direct B2B Order Portal (order.hsgglobal.sg)"
+                >
+                  <Package className="w-3.5 h-3.5 text-[#d4af37] group-hover:scale-110 transition-transform" />
+                  <span>Order Portal</span>
+                  <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-colors" />
+                </a>
+              </div>
             </div>
 
             {/* Bottom Row: Corporate Registration & Address Details */}
@@ -1491,6 +1507,9 @@ export default function App() {
             </div>
           </div>
         </footer>
+
+        {/* Trade Support & Export Concierge Chat Assist */}
+        <ChatAssist />
     </div>
   );
 }
