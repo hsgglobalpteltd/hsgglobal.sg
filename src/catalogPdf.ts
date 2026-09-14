@@ -203,20 +203,48 @@ export async function generateExportCatalogPdf(
 
   // 1. Group products by Brand
   const brandGroups: { [brandId: string]: CatalogProduct[] } = {};
+  const brandPrimaryCategoryMap: { [brandId: string]: string } = {};
 
   products.forEach((prod) => {
     const bId = prod.brands_id || "BRAND_OTHER";
     if (!brandGroups[bId]) brandGroups[bId] = [];
     brandGroups[bId].push(prod);
+
+    // Track primary product category for this brand
+    if (!brandPrimaryCategoryMap[bId]) {
+      const cat = (prod.product_meta && prod.product_meta.Category) || prod.category || "";
+      if (cat) brandPrimaryCategoryMap[bId] = cat;
+    }
   });
 
-  // Sort brands by Rank or Name, and sort products inside each brand alphabetically
+  // Category sorting order priority (e.g., Cooking Paste / Food first, then Beverage, Snacks, Others)
+  const getCategoryPriority = (catName: string): number => {
+    const lower = catName.toLowerCase();
+    if (lower.includes("paste") || lower.includes("sauce") || lower.includes("cook")) return 1;
+    if (lower.includes("food") || lower.includes("meal") || lower.includes("ambient")) return 2;
+    if (lower.includes("beverage") || lower.includes("drink") || lower.includes("soda") || lower.includes("juice")) return 3;
+    if (lower.includes("snack") || lower.includes("confection")) return 4;
+    return 5;
+  };
+
+  // Sort brands primarily by Category, secondarily by Rank and Name
   const sortedBrandIds = Object.keys(brandGroups).sort((a, b) => {
+    const catA = brandPrimaryCategoryMap[a] || "";
+    const catB = brandPrimaryCategoryMap[b] || "";
+    const catPrioA = getCategoryPriority(catA);
+    const catPrioB = getCategoryPriority(catB);
+
+    if (catPrioA !== catPrioB) return catPrioA - catPrioB;
+    if (catA.toLowerCase() !== catB.toLowerCase()) {
+      return catA.toLowerCase().localeCompare(catB.toLowerCase());
+    }
+
     const brandA = brandMap.get(a);
     const brandB = brandMap.get(b);
     const rankA = Number(brandA?.rank || 999);
     const rankB = Number(brandB?.rank || 999);
     if (rankA !== rankB) return rankA - rankB;
+
     const nameA = (brandA?.display_name || a).toLowerCase();
     const nameB = (brandB?.display_name || b).toLowerCase();
     return nameA.localeCompare(nameB);
@@ -234,7 +262,7 @@ export async function generateExportCatalogPdf(
   const productImagesMap: { [sku: string]: string | null } = {};
   let companyLogoBase64: string | null = null;
 
-  await loadImageAsDataUrl("/assets/logo/Logo.png", true).then((res) => {
+  await loadImageAsDataUrl("/assets/logo/Logo.webp", true).then((res) => {
     companyLogoBase64 = res;
   });
 

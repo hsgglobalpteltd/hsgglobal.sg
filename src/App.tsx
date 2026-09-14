@@ -513,16 +513,31 @@ export default function App() {
   const [catalogHash, setCatalogHash] = useState<string>('');
   const [cachedPdfUrl, setCachedPdfUrl] = useState<string | null>(null);
 
-  // Helper for fast trigger download directly from backend / R2 cache
+  // Helper for generating and downloading fresh live catalog PDF
   const handleDownloadCatalog = (prospectName?: string, companyName?: string) => {
-    const downloadEndpoint = cachedPdfUrl || 'https://ib-v2.hsgglobalpteltd.workers.dev/api/exhibitor/download-catalog-pdf';
-    const link = document.createElement('a');
-    link.href = downloadEndpoint;
-    link.download = 'HSG_Global_Official_Export_Catalog.pdf';
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const currentProds = productsRef.current.length > 0 ? productsRef.current : products;
+    if (currentProds && currentProds.length > 0) {
+      generateExportCatalogPdf(
+        currentProds,
+        brands,
+        prospectName,
+        companyName,
+        catalogHash,
+        {
+          headerTitle: layoutConfig.pdf_header_title,
+          subtext: layoutConfig.pdf_subtext,
+          footerText: layoutConfig.pdf_footer_text || layoutConfig.footer_showcase_text
+        }
+      );
+    } else if (cachedPdfUrl) {
+      const link = document.createElement('a');
+      link.href = cachedPdfUrl;
+      link.download = 'HSG_Global_Official_Export_Catalog.pdf';
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   useEffect(() => {
