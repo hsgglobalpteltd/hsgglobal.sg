@@ -214,16 +214,8 @@ export default function App() {
     return () => clearInterval(heroTimer);
   }, [heroImages.length]);
 
-  // Dynamic Randomized Positions & Shifts on initial page load only (computed once)
-  const [randomizedBrands] = useState<{
-    id: string;
-    url: string;
-    offsetX: number;
-    offsetY: number;
-    scale: number;
-    rotate: number;
-    zIndex: number;
-  }[]>(() => {
+  // Helper: Compute dynamic randomized brand logo positions & rotations
+  const generateRandomizedBrands = () => {
     const raw = getActiveBrandLogos();
     const shuffled = [...raw].sort(() => Math.random() - 0.5);
     return shuffled.map((b) => ({
@@ -232,10 +224,26 @@ export default function App() {
       offsetX: Math.floor(Math.random() * 40) - 20, // -20px to +20px horizontal shift
       offsetY: Math.floor(Math.random() * 70) - 35, // -35px to +35px up/down offset
       scale: 0.9 + Math.random() * 0.25,           // 0.9 to 1.15 scale
-      rotate: Math.floor(Math.random() * 10) - 5,   // -5deg to +5deg tilt
+      rotate: Math.floor(Math.random() * 12) - 6,   // -6deg to +6deg subtle organic tilt
       zIndex: Math.floor(Math.random() * 10) + 1
     }));
-  });
+  };
+
+  const [randomizedBrands, setRandomizedBrands] = useState<
+    {
+      id: string;
+      url: string;
+      offsetX: number;
+      offsetY: number;
+      scale: number;
+      rotate: number;
+      zIndex: number;
+    }[]
+  >(() => generateRandomizedBrands());
+
+  const shuffleBrands = useCallback(() => {
+    setRandomizedBrands(generateRandomizedBrands());
+  }, []);
 
   const [randomizedRetailers, setRandomizedRetailers] = useState<{
     id: string;
@@ -447,6 +455,7 @@ export default function App() {
     setTimeout(() => setIsSplashing(false), 700);
 
     executeSmoothSwap(nextBatchProducts.length > 0 ? nextBatchProducts : undefined);
+    shuffleBrands(); // Rotate and randomize brand logo positions
     setSwapKey((prev) => prev + 1); // Restarts the 30s water fill from bottom
     setTimeout(() => setIsRefreshingProducts(false), 400);
   };
@@ -534,12 +543,13 @@ export default function App() {
           }, 280);
           return currentFeatured;
         });
+        shuffleBrands(); // Auto-rotate and shuffle brand logo positions when water fills
         setSwapKey((prev) => prev + 1);
       }
     }, 30 * 1000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [shuffleBrands]);
 
   // Exhibition / Meeting Booking Window: Dynamic from Project 1 layoutConfig
   const EXPO_START_TIME = new Date((layoutConfig.booking_start_date || '2026-08-27') + 'T00:00:00').getTime();
@@ -978,9 +988,9 @@ export default function App() {
                       key={groupName}
                       className="relative bg-transparent rounded-2xl border border-slate-300/80 p-5 pt-6 flex flex-col items-center h-fit shrink-0 max-w-full sm:max-w-md min-w-[220px]"
                     >
-                      {/* Pure Text Label on Top of the Line */}
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#faf9f6] px-3 py-0.5 rounded-full border border-slate-300/80">
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 whitespace-nowrap">
+                      {/* Pure Text Label on Top of the Line (Dead Centered) */}
+                      <div className="absolute top-0 -translate-y-1/2 left-1/2 -translate-x-1/2 bg-[#faf9f6] px-4 py-1 rounded-full border border-slate-300/80 flex items-center justify-center shadow-xs">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 whitespace-nowrap leading-none">
                           {groupName}
                         </span>
                       </div>
