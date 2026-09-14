@@ -540,27 +540,38 @@ export default function App() {
       }
     }
     loadCatalog();
+  }, []);
 
-    // Auto rotate every 30 seconds (30 * 1000 ms) in sync with the 30s water fill
+  // Stable References for Auto-Rotation Interval
+  const productsRef = React.useRef<CatalogProduct[]>([]);
+  productsRef.current = products;
+
+  const shuffleBrandsRef = React.useRef(shuffleBrands);
+  shuffleBrandsRef.current = shuffleBrands;
+
+  const shuffleRetailersRef = React.useRef(shuffleRetailers);
+  shuffleRetailersRef.current = shuffleRetailers;
+
+  // Auto rotate strictly every 30 seconds (30 * 1000 ms) in sync with the 30s water fill
+  useEffect(() => {
     const interval = setInterval(() => {
-      if (allLoadedProducts.length > 0) {
-        setFeaturedProducts((currentFeatured) => {
-          setIsFadingSwap(true);
-          setTimeout(() => {
-            const freshBatch = computeRandomPickBatch(allLoadedProducts);
-            setFeaturedProducts(freshBatch);
-            setIsFadingSwap(false);
-          }, 280);
-          return currentFeatured;
-        });
-        shuffleBrands(); // Auto-rotate and shuffle brand logo positions when water fills
-        shuffleRetailers(); // Auto-rotate and shuffle retailer logo positions when water fills
+      const currentProds = productsRef.current;
+      if (currentProds.length > 0) {
+        setIsFadingSwap(true);
+        setTimeout(() => {
+          const freshBatch = computeRandomPickBatch(currentProds);
+          setFeaturedProducts(freshBatch);
+          setIsFadingSwap(false);
+        }, 280);
+
+        shuffleBrandsRef.current(); // Auto-rotate and shuffle brand logo positions when water fills
+        shuffleRetailersRef.current(); // Auto-rotate and shuffle retailer logo positions when water fills
         setSwapKey((prev) => prev + 1);
       }
     }, 30 * 1000);
 
     return () => clearInterval(interval);
-  }, [shuffleBrands, shuffleRetailers]);
+  }, []);
 
   // Exhibition / Meeting Booking Window: Dynamic from Project 1 layoutConfig
   const EXPO_START_TIME = new Date((layoutConfig.booking_start_date || '2026-08-27') + 'T00:00:00').getTime();
