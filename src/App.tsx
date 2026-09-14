@@ -1071,6 +1071,8 @@ export default function App() {
                             <img
                               src={r.url}
                               alt={r.id}
+                              loading="eager"
+                              decoding="async"
                               className="h-10 sm:h-12 max-w-[130px] object-contain drop-shadow-xs hover:drop-shadow-lg transition-all"
                             />
                           </div>
@@ -1114,6 +1116,8 @@ export default function App() {
                 <img
                   src={brand.url}
                   alt={brand.id}
+                  loading="eager"
+                  decoding="async"
                   className="h-16 sm:h-22 max-w-[150px] object-contain drop-shadow-sm hover:drop-shadow-xl transition-all"
                 />
               </div>

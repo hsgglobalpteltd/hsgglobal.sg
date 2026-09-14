@@ -58,16 +58,7 @@ export function getActiveRetailerLogos(): { id: string; url: string; group?: str
     const url = typeof rawUrl === 'string' ? rawUrl : (rawUrl as any)?.default || '';
     if (url) {
       const id = filePath.split('/').pop()?.split('.')[0] || '';
-      let defaultGroup = 'Global Partners';
-      const lowerId = id.toLowerCase();
-      if (lowerId.includes('fair') || lowerId.includes('giant') || lowerId.includes('shell')) {
-        defaultGroup = 'Singapore';
-      } else if (lowerId.includes('foodhall') || lowerId.includes('ranch') || lowerId.includes('pasar') || lowerId.includes('swalayan')) {
-        defaultGroup = 'Indonesia';
-      } else if (lowerId.includes('korzinka')) {
-        defaultGroup = 'Uzbekistan';
-      }
-      logos.push({ id, url, group: defaultGroup });
+      logos.push({ id, url, group: 'Global Partners' });
     }
   }
   return logos;
