@@ -19,7 +19,7 @@ interface ChatMessage {
 }
 
 const QUICK_SUGGESTIONS = [
-  "What is the export MOQ per container / pallet?",
+  "What is the MOQ per container / pallet?",
   "Can you arrange FOB / CIF shipping?",
   "What culinary paste brands are available?",
   "How do I request physical product samples?"
@@ -78,7 +78,7 @@ export function ChatAssist() {
     const welcomeMsg: ChatMessage = {
       id: "welcome_" + Date.now(),
       sender: "agent",
-      text: "Hello! Welcome to HSG Global. I am your export and wholesale trade concierge. Feel free to ask about our product catalog, FOB/CIF shipping, pallet specifications, private label, or trade inquiry details!",
+      text: "Hello! Welcome to HSG Global. I am your product and wholesale trade concierge. Feel free to ask about our product catalog, FOB/CIF shipping, pallet specifications, private label, or trade inquiry details!",
       timestamp: Date.now()
     };
     setMessages([welcomeMsg]);
@@ -146,7 +146,7 @@ export function ChatAssist() {
       const fallbackMessage: ChatMessage = {
         id: "msg_err_" + Date.now(),
         sender: "agent",
-        text: "Thank you for reaching out. Our export directors are reviewing catalog details. Please feel free to submit an inquiry through our form or email us directly at sales@hsg-global.com.",
+        text: "Thank you for reaching out. Our team is reviewing catalog details. Please feel free to submit an inquiry through our form or email us directly at sales@hsg-global.com.",
         timestamp: Date.now()
       };
       setMessages((prev) => [...prev, fallbackMessage]);
@@ -166,7 +166,7 @@ export function ChatAssist() {
     const welcomeMsg: ChatMessage = {
       id: "welcome_" + Date.now(),
       sender: "agent",
-      text: "Hello! Welcome to HSG Global. I am your export and wholesale trade concierge. How may I assist you today?",
+      text: "Hello! Welcome to HSG Global. I am your product and wholesale trade concierge. How may I assist you today?",
       timestamp: Date.now()
     };
     setMessages([welcomeMsg]);
@@ -218,7 +218,7 @@ export function ChatAssist() {
                   <span className="cs-header-main-title">Chat Assist</span>
                   <span className="cs-header-tag">Concierge</span>
                 </div>
-                <span className="cs-header-subtitle">HSG Global Trade & Export Desk</span>
+                <span className="cs-header-subtitle">HSG Global Trade &amp; Service Desk</span>
               </div>
             </div>
 

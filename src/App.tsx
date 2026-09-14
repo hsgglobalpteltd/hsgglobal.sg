@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Download,
   Sparkles,
@@ -25,7 +25,11 @@ import {
   RefreshCw,
   Utensils,
   Truck,
-  ArrowUpRight
+  ArrowUpRight,
+  Upload,
+  Paperclip,
+  FileText,
+  X
 } from 'lucide-react';
 import {
   getActiveBrandLogos,
@@ -114,6 +118,7 @@ export default function App() {
   const activeRetailers = getActiveRetailerLogos();
   const rawBrands = getActiveBrandLogos();
   const [heroImages, setHeroImages] = useState<string[]>(getCustomHeroImages());
+  const [remoteRetailers, setRemoteRetailers] = useState<any[]>([]);
   const { normalLogo, whiteLogo, favicon } = getAppLogos();
 
   // Track high-res loaded states for smooth progressive blur-up
@@ -158,6 +163,9 @@ export default function App() {
           const lData = await logosRes.json();
           if (lData.hero && lData.hero.length > 0) {
             setHeroImages(lData.hero.map((h: any) => h.url));
+          }
+          if (lData.retailers && lData.retailers.length > 0) {
+            setRemoteRetailers(lData.retailers);
           }
         }
       } catch (err) {
@@ -206,8 +214,8 @@ export default function App() {
     return () => clearInterval(heroTimer);
   }, [heroImages.length]);
 
-  // Dynamic Randomized Positions & Shifts on every page load
-  const [randomizedBrands, setRandomizedBrands] = useState<{
+  // Dynamic Randomized Positions & Shifts on initial page load only (computed once)
+  const [randomizedBrands] = useState<{
     id: string;
     url: string;
     offsetX: number;
@@ -215,12 +223,10 @@ export default function App() {
     scale: number;
     rotate: number;
     zIndex: number;
-  }[]>([]);
-
-  useEffect(() => {
-    // Shuffle and randomize offsets on reload
-    const shuffled = [...rawBrands].sort(() => Math.random() - 0.5);
-    const mapped = shuffled.map((b) => ({
+  }[]>(() => {
+    const raw = getActiveBrandLogos();
+    const shuffled = [...raw].sort(() => Math.random() - 0.5);
+    return shuffled.map((b) => ({
       id: b.id,
       url: b.url,
       offsetX: Math.floor(Math.random() * 40) - 20, // -20px to +20px horizontal shift
@@ -229,8 +235,56 @@ export default function App() {
       rotate: Math.floor(Math.random() * 10) - 5,   // -5deg to +5deg tilt
       zIndex: Math.floor(Math.random() * 10) + 1
     }));
-    setRandomizedBrands(mapped);
-  }, []);
+  });
+
+  const [randomizedRetailers, setRandomizedRetailers] = useState<{
+    id: string;
+    url: string;
+    group: string;
+    offsetX: number;
+    offsetY: number;
+    scale: number;
+    rotate: number;
+    zIndex: number;
+  }[]>([]);
+
+  useEffect(() => {
+    // Compute effective retailers list (from remote R2 if available, or local assets)
+    const baseRetailers = remoteRetailers.length > 0
+      ? remoteRetailers.map((r) => ({
+          id: (r.filename || r.key?.split('/').pop() || '').replace(/\.[^/.]+$/, ''),
+          url: r.url,
+          key: r.key,
+          filename: r.filename
+        }))
+      : activeRetailers;
+
+    // Shuffle and randomize retailer offsets on reload
+    const mappedRetailers = baseRetailers.map((r: any) => {
+      const rId = r.id || r.filename?.replace(/\.[^/.]+$/, '') || '';
+      const rKey = r.key || '';
+      
+      // Check admin custom group config by ID or Key
+      const customGroup =
+        layoutConfig.retailer_groups?.[rId] ||
+        layoutConfig.retailer_groups?.[rKey] ||
+        (layoutConfig.retailer_groups && Object.entries(layoutConfig.retailer_groups).find(([k]) => k.toLowerCase() === rId.toLowerCase())?.[1]) ||
+        r.group ||
+        'Global Partners';
+
+      return {
+        id: rId,
+        url: r.url,
+        group: customGroup as string,
+        offsetX: Math.floor(Math.random() * 16) - 8, // -8px to +8px subtle shift
+        offsetY: Math.floor(Math.random() * 16) - 8, // -8px to +8px subtle shift
+        scale: 0.85 + Math.random() * 0.18,          // 0.85 to 1.03 scale (slightly smaller)
+        rotate: Math.floor(Math.random() * 8) - 4,   // -4deg to +4deg tilt
+        zIndex: Math.floor(Math.random() * 10) + 1
+      };
+    });
+    setRandomizedRetailers(mappedRetailers);
+  }, [layoutConfig.retailer_groups, remoteRetailers]);
 
   // Lead Form States
   const [formData, setFormData] = useState({
@@ -239,8 +293,10 @@ export default function App() {
     email: '',
     phone: '',
     inquiry_type: 'Looking to Import Asian Products / Global Distribution',
-    message: ''
+    message: '',
+    catalog_file_url: ''
   });
+  const [brandCatalogFile, setBrandCatalogFile] = useState<{ name: string; base64: string; size: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState('');
@@ -605,6 +661,30 @@ export default function App() {
       setVerificationMessage('Domain verified! Building export catalog PDF...');
       await new Promise((r) => setTimeout(r, 850));
 
+      // Step 2.5: If brand catalog file attached, upload directly to R2
+      let uploadedCatalogUrl = formData.catalog_file_url || '';
+      if (brandCatalogFile?.base64) {
+        setVerificationStatus('generating');
+        setVerificationMessage('Uploading your brand catalog to secure storage...');
+        try {
+          const upRes = await fetch('https://ib-v2.hsgglobalpteltd.workers.dev/api/exhibitor/upload-logo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              category: 'brands',
+              filename: `Brand_Catalog_${Date.now()}_${brandCatalogFile.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`,
+              base64Data: brandCatalogFile.base64
+            })
+          });
+          if (upRes.ok) {
+            const upData = await upRes.json();
+            uploadedCatalogUrl = upData.url || '';
+          }
+        } catch (upErr) {
+          console.warn('Could not upload brand catalog file:', upErr);
+        }
+      }
+
       // Step 3: Submit lead and send email copy
       setVerificationStatus('sending');
       setVerificationMessage('Dispatching trade catalog & credentials to your inbox...');
@@ -625,6 +705,7 @@ export default function App() {
           phone: formData.phone.trim(),
           inquiry_type: formData.inquiry_type,
           message: formData.message.trim(),
+          catalog_file_url: uploadedCatalogUrl,
           is_dev_mode: isDev,
           client_origin: window.location.origin,
           source: layoutConfig.top_banner || 'Official Export Catalog Website'
@@ -848,32 +929,87 @@ export default function App() {
         <div className="max-w-6xl mx-auto px-4 md:px-8 text-center mb-8">
           <div className="inline-flex items-center gap-1.5 text-xs uppercase font-extrabold tracking-widest text-amber-700 mb-1.5">
             <Globe2 className="w-3.5 h-3.5" />
-            <span>Global Retail &amp; Supermarket Distribution</span>
+            <span>Global Distribution &amp; Supply Network</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
-            We Supply Across Supermarkets &amp; Global Retail Chains
+            Our Global Distribution &amp; Retail Network
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 max-w-2xl mx-auto mt-2">
-            HSG Global distributes trusted FMCG brands across top supermarket chains, hypermarkets, and specialty grocers worldwide with full international compliance.
+            HSG Global distributes trusted FMCG brands across international trade channels, supermarket chains, foodservice partners, and regional distribution networks worldwide.
           </p>
         </div>
 
-        {/* Marquee Slider of Retailers */}
-        <div className="relative w-full overflow-hidden py-3">
-          <div className="animate-marquee gap-12 sm:gap-16 items-center">
-            {[...activeRetailers, ...activeRetailers, ...activeRetailers].map((retailer, idx) => (
-              <div
-                key={`${retailer.id}-${idx}`}
-                className="shrink-0 flex items-center justify-center transition-transform hover:scale-110 duration-200"
-              >
-                <img
-                  src={retailer.url}
-                  alt={retailer.id}
-                  className="h-12 sm:h-14 max-w-[180px] object-contain"
-                />
+        {/* Dynamic Country Group Container Cards (Desktop / Tablet) */}
+        <div className="max-w-6xl mx-auto px-4 md:px-8">
+          {(() => {
+            // Group retailers by group name
+            const groupMap: Record<string, typeof randomizedRetailers> = {};
+            randomizedRetailers.forEach((item) => {
+              const grp = item.group || 'Global Partners';
+              if (!groupMap[grp]) groupMap[grp] = [];
+              groupMap[grp].push(item);
+            });
+
+            const groupEntries = Object.entries(groupMap);
+
+            // Flag / Country Emoji Helper
+            const getGroupBadge = (groupName: string) => {
+              const lower = groupName.toLowerCase();
+              let flag = '🌐';
+              if (lower.includes('singapore') || lower.includes('sg')) flag = '🇸🇬';
+              else if (lower.includes('malaysia') || lower.includes('my')) flag = '🇲🇾';
+              else if (lower.includes('indonesia') || lower.includes('id')) flag = '🇮🇩';
+              else if (lower.includes('uzbekistan') || lower.includes('uz')) flag = '🇺🇿';
+              else if (lower.includes('australia') || lower.includes('au')) flag = '🇦🇺';
+              else if (lower.includes('vietnam') || lower.includes('vn')) flag = '🇻🇳';
+              else if (lower.includes('thailand') || lower.includes('th')) flag = '🇹🇭';
+              else if (lower.includes('philippines') || lower.includes('ph')) flag = '🇵🇭';
+              else if (lower.includes('global') || lower.includes('partner') || lower.includes('international')) flag = '🌍';
+              return { flag, name: groupName };
+            };
+
+            return (
+              <div className="flex flex-wrap items-start justify-center gap-6">
+                {groupEntries.map(([groupName, items]) => {
+                  const badge = getGroupBadge(groupName);
+
+                  return (
+                    <div
+                      key={groupName}
+                      className="relative bg-transparent rounded-2xl border border-slate-300/80 p-5 pt-6 flex flex-col items-center h-fit shrink-0 max-w-full sm:max-w-md min-w-[220px]"
+                    >
+                      {/* Pure Text Label on Top of the Line */}
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#faf9f6] px-3 py-0.5 rounded-full border border-slate-300/80">
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 whitespace-nowrap">
+                          {groupName}
+                        </span>
+                      </div>
+
+                      {/* Organic Floating Retailer Logos inside Container */}
+                      <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-4 px-2 py-1 min-h-[70px]">
+                        {items.map((r, rIdx) => (
+                          <div
+                            key={`${r.id}-${rIdx}`}
+                            style={{
+                              transform: `translate(${r.offsetX}px, ${r.offsetY}px) scale(${r.scale}) rotate(${r.rotate}deg)`,
+                              zIndex: r.zIndex
+                            }}
+                            className="shrink-0 p-1.5 flex items-center justify-center transition-all duration-300 ease-out hover:!scale-125 hover:!z-50 hover:!rotate-0 cursor-pointer"
+                          >
+                            <img
+                              src={r.url}
+                              alt={r.id}
+                              className="h-10 sm:h-12 max-w-[130px] object-contain drop-shadow-xs hover:drop-shadow-lg transition-all"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </div>
       </section>
 
@@ -881,10 +1017,10 @@ export default function App() {
       <section className="py-16 bg-batik-cream border-b border-slate-200 overflow-hidden">
         <div className="max-w-6xl mx-auto px-4 md:px-8 text-center mb-4">
           <span className="text-xs font-extrabold text-amber-700 uppercase tracking-widest block mb-1">
-            Our Export Brand Portfolio
+            Our Brand Portfolio
           </span>
           <h2 className="text-2xl sm:text-4xl font-extrabold text-slate-900">
-            Featured Export Brands
+            Featured Brands
           </h2>
           <p className="text-xs sm:text-sm text-slate-600 max-w-xl mx-auto mt-2">
             A curated family of Southeast Asia’s most celebrated ready-to-cook FMCG culinary, paste, and beverage brands.
@@ -912,6 +1048,34 @@ export default function App() {
             ))}
           </div>
         </div>
+
+        {/* Compact 1-Line Brand Owner Callout Ribbon */}
+        <div className="max-w-4xl mx-auto px-4 mt-4">
+          <div className="bg-slate-900 text-white rounded-2xl p-4 sm:px-6 sm:py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm border border-slate-800">
+            <div className="text-center sm:text-left flex-1 min-w-0">
+              <h3 className="text-xs sm:text-sm font-extrabold text-white tracking-wide">
+                Brand Owner or Food &amp; Beverage Producer?
+              </h3>
+              <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5 leading-snug">
+                Distribute your FMCG brand into Singapore supermarkets &amp; regional retail channels.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setFormData((prev) => ({
+                  ...prev,
+                  inquiry_type: 'Brand Principal / FMCG Distribution Partnership'
+                }));
+                setShowFullInquiryForm(true);
+                scrollToSection('lead-form');
+              }}
+              className="shrink-0 bg-[#d4af37] hover:bg-amber-400 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider transition-all cursor-pointer shadow-sm flex items-center gap-1.5 active:scale-95 whitespace-nowrap"
+            >
+              <span>Partner With Us</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
       </section>
 
       {/* 4. FEATURE PRODUCTS (PRODUCT HIGHLIGHTS - CLEAN WHITE/LIGHT CARDS) */}
@@ -920,13 +1084,13 @@ export default function App() {
           <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
             <div>
               <span className="text-xs font-extrabold text-amber-700 uppercase tracking-widest">
-                Export Catalog Preview
+                Product Catalog Preview
               </span>
               <h2 className="text-2xl sm:text-4xl font-extrabold text-slate-900 mt-1">
                 Featured Ready-to-Cook &amp; Beverage Highlights
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 mt-2 max-w-2xl">
-                Explore our export-ready products with complete carton specifications, ambient shelf-life, and instant FOB/CIF trade pricing for your shelves.
+                Explore our featured products with complete carton specifications, ambient shelf-life, and instant trade pricing for your shelves.
               </p>
             </div>
 
@@ -975,7 +1139,7 @@ export default function App() {
 
           {loadingProducts ? (
             <div className="py-16 text-center text-slate-400 text-sm animate-pulse">
-              Loading export product specifications...
+              Loading product specifications...
             </div>
           ) : (
             <div className={`flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 overflow-x-auto sm:overflow-x-visible pb-4 sm:pb-0 snap-x snap-mandatory scrollbar-none transition-all duration-300 ease-in-out ${
@@ -1235,7 +1399,7 @@ export default function App() {
               Trade Inquiry &amp; Custom FOB/CIF Quote
             </h2>
             <p className="text-xs sm:text-sm text-slate-600 max-w-lg mx-auto mt-2 leading-relaxed">
-              Connect directly with our export directors for wholesale distribution, private label inquiries, or custom container shipping quotes to regional and international ports worldwide.
+              Connect directly with our sales team for wholesale distribution, private label inquiries, or custom container shipping quotes to regional and international ports worldwide.
             </p>
           </div>
 
@@ -1248,7 +1412,7 @@ export default function App() {
                 Thank You{formData.name ? `, ${formData.name}` : ''}!
               </h3>
               <p className="text-sm text-slate-600 mt-2 max-w-md mx-auto">
-                Your <strong>Export Product Catalog PDF</strong> has downloaded to your device and an email has been sent to <strong>{formData.email}</strong>.
+                Your <strong>Product Catalog PDF</strong> has downloaded to your device and an email has been sent to <strong>{formData.email}</strong>.
               </p>
               <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
@@ -1398,6 +1562,9 @@ export default function App() {
                         <option value="Looking to Import Asian Products / Global Distribution">
                           Looking to Import Ready-to-Cook Pastes, Halal Food &amp; Beverages
                         </option>
+                        <option value="Brand Principal / FMCG Distribution Partnership">
+                          Brand Owner / Distribute My Brand into Singapore Retail &amp; Global Markets
+                        </option>
                         <option value="Looking for Supermarket & Retail FMCG Distribution">
                           Looking for Retail FMCG Distribution &amp; Brand Representation
                         </option>
@@ -1418,12 +1585,81 @@ export default function App() {
                     </label>
                     <textarea
                       rows={3}
-                      placeholder="Tell us about your distribution channels, port of destination, or specific products of interest..."
+                      placeholder={formData.inquiry_type.includes('Brand Principal') ? "Tell us about your brand heritage, target retail chains, or production capacity..." : "Tell us about your distribution channels, port of destination, or specific products of interest..."}
                       value={formData.message}
                       onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                       className="w-full bg-slate-50/70 border border-slate-300 rounded-lg px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-[#d4af37] focus:ring-1 focus:ring-[#d4af37] transition-all resize-none"
                     />
                   </div>
+
+                  {/* Brand Catalog / Company Profile Upload (PDF / Image) - Visible for Brand Principal / Partnership inquiries */}
+                  {formData.inquiry_type.includes('Brand Principal') && (
+                    <div className="pt-1 animate-fadeIn">
+                      <label className="block text-xs font-semibold text-slate-800 mb-1.5 uppercase tracking-wide flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Paperclip className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Upload Brand Catalog / Profile</span>
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-normal">PDF or Images (Max 15MB)</span>
+                      </label>
+
+                      {!brandCatalogFile ? (
+                        <label className="flex items-center justify-center gap-2 p-3 bg-slate-50 hover:bg-slate-100/80 border border-dashed border-slate-300 rounded-xl cursor-pointer transition-colors group">
+                          <Upload className="w-4 h-4 text-slate-400 group-hover:text-amber-600 transition-colors" />
+                          <span className="text-xs font-semibold text-slate-600 group-hover:text-slate-900">
+                            Click to attach your product catalog (PDF / JPEG / PNG)
+                          </span>
+                          <input
+                            type="file"
+                            accept=".pdf,.png,.jpg,.jpeg,.webp"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 15 * 1024 * 1024) {
+                                setSubmitError('File size exceeds 15MB limit.');
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                const result = reader.result as string;
+                                const base64 = result.split(',')[1] || '';
+                                const sizeMB = (file.size / (1024 * 1024)).toFixed(1) + ' MB';
+                                setBrandCatalogFile({
+                                  name: file.name,
+                                  base64,
+                                  size: sizeMB
+                                });
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                        </label>
+                      ) : (
+                        <div className="flex items-center justify-between p-2.5 px-3 bg-amber-50/70 border border-amber-200 rounded-xl">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <FileText className="w-4 h-4 text-amber-700 shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-slate-900 truncate">
+                                {brandCatalogFile.name}
+                              </p>
+                              <span className="text-[10px] font-semibold text-amber-700">
+                                {brandCatalogFile.size} • Ready to upload
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setBrandCatalogFile(null)}
+                            className="p-1 rounded-full hover:bg-amber-100 text-slate-500 hover:text-rose-600 transition-colors cursor-pointer"
+                            title="Remove file"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="pt-2">
                     <button
@@ -1432,14 +1668,16 @@ export default function App() {
                       className="w-full bg-slate-900 hover:bg-black text-white font-bold py-3 rounded-xl transition-all text-xs uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-60"
                     >
                       <Send className="w-4 h-4 text-amber-400" />
-                      <span>Submit Inquiry &amp; Download Catalog</span>
+                      <span>{formData.inquiry_type.includes('Brand Principal') ? 'Submit Brand Distribution Application' : 'Submit Trade Inquiry'}</span>
                     </button>
                   </div>
                 </div>
               )}
 
               <p className="text-[11px] text-slate-500 text-center pt-2">
-                All submitted trade data is kept strictly confidential. The export catalog will be delivered directly to your inbox.
+                {formData.inquiry_type.includes('Brand Principal')
+                  ? 'All submitted trade data is kept strictly confidential. Our distribution team will review your brand details and reach out.'
+                  : 'All submitted trade data is kept strictly confidential. The product catalog will be delivered directly to your inbox.'}
               </p>
             </form>
           )}
@@ -1468,7 +1706,7 @@ export default function App() {
                     </span>
                   </div>
                   <span className="text-[11px] text-amber-400/90 font-medium block mt-0.5">
-                    {layoutConfig.footer_showcase_text || 'Official Export Catalog & Global FMCG Gateway'}
+                    {layoutConfig.footer_showcase_text || 'Official Product Catalog & Global FMCG Gateway'}
                   </span>
                   <span className="text-[11px] text-slate-400 block mt-0.5">
                     Global Foodservice &amp; FMCG Supermarket Distribution Gateway
