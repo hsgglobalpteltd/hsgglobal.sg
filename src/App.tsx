@@ -245,18 +245,7 @@ export default function App() {
     setRandomizedBrands(generateRandomizedBrands());
   }, []);
 
-  const [randomizedRetailers, setRandomizedRetailers] = useState<{
-    id: string;
-    url: string;
-    group: string;
-    offsetX: number;
-    offsetY: number;
-    scale: number;
-    rotate: number;
-    zIndex: number;
-  }[]>([]);
-
-  useEffect(() => {
+  const generateRandomizedRetailers = useCallback(() => {
     // Compute effective retailers list (from remote R2 if available, or local assets)
     const baseRetailers = remoteRetailers.length > 0
       ? remoteRetailers.map((r) => ({
@@ -267,8 +256,10 @@ export default function App() {
         }))
       : activeRetailers;
 
-    // Shuffle and randomize retailer offsets on reload
-    const mappedRetailers = baseRetailers.map((r: any) => {
+    // Shuffle and randomize retailer offsets and positions within their country groups
+    const shuffledBase = [...baseRetailers].sort(() => Math.random() - 0.5);
+
+    return shuffledBase.map((r: any) => {
       const rId = r.id || r.filename?.replace(/\.[^/.]+$/, '') || '';
       const rKey = r.key || '';
       
@@ -284,15 +275,33 @@ export default function App() {
         id: rId,
         url: r.url,
         group: customGroup as string,
-        offsetX: Math.floor(Math.random() * 16) - 8, // -8px to +8px subtle shift
-        offsetY: Math.floor(Math.random() * 16) - 8, // -8px to +8px subtle shift
-        scale: 0.85 + Math.random() * 0.18,          // 0.85 to 1.03 scale (slightly smaller)
-        rotate: Math.floor(Math.random() * 8) - 4,   // -4deg to +4deg tilt
+        offsetX: Math.floor(Math.random() * 24) - 12, // -12px to +12px organic shift
+        offsetY: Math.floor(Math.random() * 20) - 10, // -10px to +10px organic shift
+        scale: 0.85 + Math.random() * 0.18,          // 0.85 to 1.03 scale
+        rotate: Math.floor(Math.random() * 10) - 5,   // -5deg to +5deg tilt
         zIndex: Math.floor(Math.random() * 10) + 1
       };
     });
-    setRandomizedRetailers(mappedRetailers);
-  }, [layoutConfig.retailer_groups, remoteRetailers]);
+  }, [layoutConfig.retailer_groups, remoteRetailers, activeRetailers]);
+
+  const [randomizedRetailers, setRandomizedRetailers] = useState<{
+    id: string;
+    url: string;
+    group: string;
+    offsetX: number;
+    offsetY: number;
+    scale: number;
+    rotate: number;
+    zIndex: number;
+  }[]>([]);
+
+  useEffect(() => {
+    setRandomizedRetailers(generateRandomizedRetailers());
+  }, [generateRandomizedRetailers]);
+
+  const shuffleRetailers = useCallback(() => {
+    setRandomizedRetailers(generateRandomizedRetailers());
+  }, [generateRandomizedRetailers]);
 
   // Lead Form States
   const [formData, setFormData] = useState({
@@ -456,6 +465,7 @@ export default function App() {
 
     executeSmoothSwap(nextBatchProducts.length > 0 ? nextBatchProducts : undefined);
     shuffleBrands(); // Rotate and randomize brand logo positions
+    shuffleRetailers(); // Re-shuffle retailer / supermarket logo positions
     setSwapKey((prev) => prev + 1); // Restarts the 30s water fill from bottom
     setTimeout(() => setIsRefreshingProducts(false), 400);
   };
@@ -544,12 +554,13 @@ export default function App() {
           return currentFeatured;
         });
         shuffleBrands(); // Auto-rotate and shuffle brand logo positions when water fills
+        shuffleRetailers(); // Auto-rotate and shuffle retailer logo positions when water fills
         setSwapKey((prev) => prev + 1);
       }
     }, 30 * 1000);
 
     return () => clearInterval(interval);
-  }, [shuffleBrands]);
+  }, [shuffleBrands, shuffleRetailers]);
 
   // Exhibition / Meeting Booking Window: Dynamic from Project 1 layoutConfig
   const EXPO_START_TIME = new Date((layoutConfig.booking_start_date || '2026-08-27') + 'T00:00:00').getTime();
