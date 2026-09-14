@@ -245,25 +245,14 @@ export default function App() {
     setRandomizedBrands(generateRandomizedBrands());
   }, []);
 
-  const generateRandomizedRetailers = useCallback(() => {
-    // Compute effective retailers list (from remote R2 if available, or local assets)
-    const baseRetailers = remoteRetailers.length > 0
-      ? remoteRetailers.map((r) => ({
-          id: (r.filename || r.key?.split('/').pop() || '').replace(/\.[^/.]+$/, ''),
-          url: r.url,
-          key: r.key,
-          filename: r.filename
-        }))
-      : activeRetailers;
-
-    // Shuffle and randomize retailer offsets and positions within their country groups
+  const computeInitialRetailers = () => {
+    const baseRetailers = activeRetailers;
     const shuffledBase = [...baseRetailers].sort(() => Math.random() - 0.5);
 
     return shuffledBase.map((r: any) => {
       const rId = r.id || r.filename?.replace(/\.[^/.]+$/, '') || '';
       const rKey = r.key || '';
       
-      // Check admin custom group config by ID or Key
       const customGroup =
         layoutConfig.retailer_groups?.[rId] ||
         layoutConfig.retailer_groups?.[rKey] ||
@@ -282,7 +271,7 @@ export default function App() {
         zIndex: Math.floor(Math.random() * 10) + 1
       };
     });
-  }, [layoutConfig.retailer_groups, remoteRetailers, activeRetailers]);
+  };
 
   const [randomizedRetailers, setRandomizedRetailers] = useState<{
     id: string;
@@ -293,15 +282,66 @@ export default function App() {
     scale: number;
     rotate: number;
     zIndex: number;
-  }[]>([]);
+  }[]>(() => computeInitialRetailers());
 
-  useEffect(() => {
-    setRandomizedRetailers(generateRandomizedRetailers());
-  }, [generateRandomizedRetailers]);
+  // Ref stores to access latest state without creating reactive dependencies
+  const remoteRetailersRef = React.useRef(remoteRetailers);
+  remoteRetailersRef.current = remoteRetailers;
+
+  const layoutConfigRef = React.useRef(layoutConfig);
+  layoutConfigRef.current = layoutConfig;
+
+  const activeRetailersRef = React.useRef(activeRetailers);
+  activeRetailersRef.current = activeRetailers;
 
   const shuffleRetailers = useCallback(() => {
-    setRandomizedRetailers(generateRandomizedRetailers());
-  }, [generateRandomizedRetailers]);
+    const effectiveRemote = remoteRetailersRef.current;
+    const effectiveActive = activeRetailersRef.current;
+    const effectiveConfig = layoutConfigRef.current;
+
+    const baseRetailers = effectiveRemote.length > 0
+      ? effectiveRemote.map((r) => ({
+          id: (r.filename || r.key?.split('/').pop() || '').replace(/\.[^/.]+$/, ''),
+          url: r.url,
+          key: r.key,
+          filename: r.filename
+        }))
+      : effectiveActive;
+
+    const shuffledBase = [...baseRetailers].sort(() => Math.random() - 0.5);
+
+    const randomized = shuffledBase.map((r: any) => {
+      const rId = r.id || r.filename?.replace(/\.[^/.]+$/, '') || '';
+      const rKey = r.key || '';
+      
+      const customGroup =
+        effectiveConfig.retailer_groups?.[rId] ||
+        effectiveConfig.retailer_groups?.[rKey] ||
+        (effectiveConfig.retailer_groups && Object.entries(effectiveConfig.retailer_groups).find(([k]) => k.toLowerCase() === rId.toLowerCase())?.[1]) ||
+        r.group ||
+        'Global Partners';
+
+      return {
+        id: rId,
+        url: r.url,
+        group: customGroup as string,
+        offsetX: Math.floor(Math.random() * 24) - 12,
+        offsetY: Math.floor(Math.random() * 20) - 10,
+        scale: 0.85 + Math.random() * 0.18,
+        rotate: Math.floor(Math.random() * 10) - 5,
+        zIndex: Math.floor(Math.random() * 10) + 1
+      };
+    });
+
+    setRandomizedRetailers(randomized);
+  }, []);
+
+  // Update retailers once when remote assets finish loading from Worker
+  useEffect(() => {
+    if (remoteRetailers.length > 0) {
+      shuffleRetailers();
+    }
+  }, [remoteRetailers.length, shuffleRetailers]);
 
   // Lead Form States
   const [formData, setFormData] = useState({
