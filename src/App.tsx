@@ -1013,7 +1013,7 @@ export default function App() {
 
       {/* 2. WE SUPPLY TO / GLOBAL DISTRIBUTION NETWORK (CLEAN WHITE) */}
       <section className="py-14 bg-batik-light border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-4 md:px-8 text-center mb-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-8 text-center mb-8">
           <div className="inline-flex items-center gap-1.5 text-xs uppercase font-extrabold tracking-widest text-amber-700 mb-1.5">
             <Globe2 className="w-3.5 h-3.5" />
             <span>Global Distribution &amp; Supply Network</span>
@@ -1027,7 +1027,7 @@ export default function App() {
         </div>
 
         {/* Dynamic Country Group Container Cards (Desktop / Tablet) */}
-        <div className="max-w-6xl mx-auto px-4 md:px-8">
+        <div className="max-w-7xl mx-auto px-4 md:px-8">
           {(() => {
             // Group retailers by group name
             const groupMap: Record<string, typeof randomizedRetailers> = {};
@@ -1055,47 +1055,92 @@ export default function App() {
               return { flag, name: groupName };
             };
 
-            return (
-              <div className="flex flex-wrap items-start justify-center gap-6">
-                {groupEntries.map(([groupName, items]) => {
-                  const badge = getGroupBadge(groupName);
+            // Sort groups by logo count (Priority / largest group first)
+            const sortedGroups = [...groupEntries].sort((a, b) => b[1].length - a[1].length);
 
-                  return (
+            const renderCard = (groupName: string, items: typeof randomizedRetailers, isCenterBig: boolean) => (
+              <div
+                key={groupName}
+                className={`relative bg-white/60 backdrop-blur-xs rounded-2xl border border-slate-300/80 p-5 pt-7 flex flex-col items-center justify-center shadow-xs hover:border-slate-400/90 transition-all duration-300 group/card w-full ${
+                  isCenterBig ? 'flex-1 h-full min-h-[220px]' : 'h-fit'
+                }`}
+              >
+                {/* Pure Text Label on Top of the Line (Dead Centered) */}
+                <div className="absolute top-0 -translate-y-1/2 left-1/2 -translate-x-1/2 bg-[#faf9f6] px-4 py-1 rounded-full border border-slate-300/80 flex items-center justify-center shadow-xs z-10">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 whitespace-nowrap leading-none">
+                    {groupName}
+                  </span>
+                </div>
+
+                {/* Organic Floating Retailer Logos inside Container */}
+                <div className={`flex flex-wrap items-center justify-center gap-x-5 gap-y-4 px-2 py-1 w-full ${
+                  isCenterBig ? 'min-h-[120px]' : 'min-h-[52px]'
+                }`}>
+                  {items.map((r, rIdx) => (
                     <div
-                      key={groupName}
-                      className="relative bg-transparent rounded-2xl border border-slate-300/80 p-5 pt-6 flex flex-col items-center h-fit shrink-0 max-w-full sm:max-w-md min-w-[220px]"
+                      key={`${r.id}-${rIdx}`}
+                      style={{
+                        transform: `translate(${r.offsetX}px, ${r.offsetY}px) scale(${r.scale}) rotate(${r.rotate}deg)`,
+                        zIndex: r.zIndex
+                      }}
+                      className="shrink-0 p-1 flex items-center justify-center transition-all duration-300 ease-out hover:!scale-125 hover:!z-50 hover:!rotate-0 cursor-pointer"
                     >
-                      {/* Pure Text Label on Top of the Line (Dead Centered) */}
-                      <div className="absolute top-0 -translate-y-1/2 left-1/2 -translate-x-1/2 bg-[#faf9f6] px-4 py-1 rounded-full border border-slate-300/80 flex items-center justify-center shadow-xs">
-                        <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-700 whitespace-nowrap leading-none">
-                          {groupName}
-                        </span>
-                      </div>
-
-                      {/* Organic Floating Retailer Logos inside Container */}
-                      <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-4 px-2 py-1 min-h-[70px]">
-                        {items.map((r, rIdx) => (
-                          <div
-                            key={`${r.id}-${rIdx}`}
-                            style={{
-                              transform: `translate(${r.offsetX}px, ${r.offsetY}px) scale(${r.scale}) rotate(${r.rotate}deg)`,
-                              zIndex: r.zIndex
-                            }}
-                            className="shrink-0 p-1.5 flex items-center justify-center transition-all duration-300 ease-out hover:!scale-125 hover:!z-50 hover:!rotate-0 cursor-pointer"
-                          >
-                            <img
-                              src={r.url}
-                              alt={r.id}
-                              loading="eager"
-                              decoding="async"
-                              className="h-10 sm:h-12 max-w-[130px] object-contain drop-shadow-xs hover:drop-shadow-lg transition-all"
-                            />
-                          </div>
-                        ))}
-                      </div>
+                      <img
+                        src={r.url}
+                        alt={r.id}
+                        loading="eager"
+                        decoding="async"
+                        className="h-10 sm:h-12 max-w-[130px] object-contain drop-shadow-xs hover:drop-shadow-lg transition-all"
+                      />
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
+              </div>
+            );
+
+            // Symmetrical 3-Column Layout: [ Left: Small Cards ] [ Center: BIG Priority Card ] [ Right: Small Cards ]
+            if (sortedGroups.length >= 3) {
+              const [primaryGroup, ...otherGroups] = sortedGroups;
+              const leftGroups: typeof otherGroups = [];
+              const rightGroups: typeof otherGroups = [];
+
+              otherGroups.forEach((grp, idx) => {
+                if (idx % 2 === 0) leftGroups.push(grp);
+                else rightGroups.push(grp);
+              });
+
+              return (
+                <div className="flex flex-col lg:flex-row items-stretch justify-center gap-6">
+                  {/* Left Column (Small Cards stacked vertically) */}
+                  <div className="flex-1 lg:flex-1 flex flex-col gap-5 justify-start">
+                    {leftGroups.map(([gName, items]) => renderCard(gName, items, false))}
+                  </div>
+
+                  {/* Center Column (BIG Priority Card) */}
+                  <div className="flex-1 lg:flex-[1.5] flex flex-col">
+                    {renderCard(primaryGroup[0], primaryGroup[1], true)}
+                  </div>
+
+                  {/* Right Column (Small Cards stacked vertically) */}
+                  <div className="flex-1 lg:flex-1 flex flex-col gap-5 justify-start">
+                    {rightGroups.map(([gName, items]) => renderCard(gName, items, false))}
+                  </div>
+                </div>
+              );
+            }
+
+            if (sortedGroups.length === 2) {
+              return (
+                <div className="flex flex-col lg:flex-row items-stretch justify-center gap-6">
+                  <div className="flex-1 flex flex-col">{renderCard(sortedGroups[0][0], sortedGroups[0][1], true)}</div>
+                  <div className="flex-1 flex flex-col">{renderCard(sortedGroups[1][0], sortedGroups[1][1], false)}</div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="max-w-2xl mx-auto w-full">
+                {sortedGroups.map(([groupName, items]) => renderCard(groupName, items, true))}
               </div>
             );
           })()}
