@@ -119,6 +119,7 @@ export default function App() {
   const rawBrands = getActiveBrandLogos();
   const [heroImages, setHeroImages] = useState<string[]>(getCustomHeroImages());
   const [remoteRetailers, setRemoteRetailers] = useState<any[]>([]);
+  const [remoteBrands, setRemoteBrands] = useState<any[]>([]);
   const { normalLogo, whiteLogo, favicon } = getAppLogos();
 
   // Track high-res loaded states for smooth progressive blur-up
@@ -166,6 +167,9 @@ export default function App() {
           }
           if (lData.retailers && lData.retailers.length > 0) {
             setRemoteRetailers(lData.retailers);
+          }
+          if (lData.brands && lData.brands.length > 0) {
+            setRemoteBrands(lData.brands);
           }
         }
       } catch (err) {
@@ -221,10 +225,10 @@ export default function App() {
     return shuffled.map((b) => ({
       id: b.id,
       url: b.url,
-      offsetX: Math.floor(Math.random() * 40) - 20, // -20px to +20px horizontal shift
-      offsetY: Math.floor(Math.random() * 70) - 35, // -35px to +35px up/down offset
-      scale: 0.9 + Math.random() * 0.25,           // 0.9 to 1.15 scale
-      rotate: Math.floor(Math.random() * 12) - 6,   // -6deg to +6deg subtle organic tilt
+      offsetX: Math.floor(Math.random() * 16) - 8, // -8px to +8px subtle shift
+      offsetY: Math.floor(Math.random() * 20) - 10, // -10px to +10px subtle shift
+      scale: 0.92 + Math.random() * 0.16,          // 0.92 to 1.08 scale
+      rotate: Math.floor(Math.random() * 8) - 4,    // -4deg to +4deg subtle organic tilt
       zIndex: Math.floor(Math.random() * 10) + 1
     }));
   };
@@ -241,9 +245,45 @@ export default function App() {
     }[]
   >(() => generateRandomizedBrands());
 
+  // Ref stores to access latest state without creating reactive dependencies
+  const remoteBrandsRef = React.useRef(remoteBrands);
+  remoteBrandsRef.current = remoteBrands;
+
+  const rawBrandsRef = React.useRef(rawBrands);
+  rawBrandsRef.current = rawBrands;
+
   const shuffleBrands = useCallback(() => {
-    setRandomizedBrands(generateRandomizedBrands());
+    const effectiveRemote = remoteBrandsRef.current;
+    const effectiveRaw = rawBrandsRef.current;
+
+    const baseBrands = effectiveRemote.length > 0
+      ? effectiveRemote.map((b) => ({
+          id: (b.filename || b.key?.split('/').pop() || '').replace(/\.[^/.]+$/, ''),
+          url: b.url,
+          name: b.name
+        }))
+      : effectiveRaw;
+
+    const shuffled = [...baseBrands].sort(() => Math.random() - 0.5);
+    const randomized = shuffled.map((b) => ({
+      id: b.id,
+      url: b.url,
+      offsetX: Math.floor(Math.random() * 16) - 8,
+      offsetY: Math.floor(Math.random() * 20) - 10,
+      scale: 0.92 + Math.random() * 0.16,
+      rotate: Math.floor(Math.random() * 8) - 4,
+      zIndex: Math.floor(Math.random() * 10) + 1
+    }));
+
+    setRandomizedBrands(randomized);
   }, []);
+
+  // Update brands once when remote assets finish loading from Worker
+  useEffect(() => {
+    if (remoteBrands.length > 0) {
+      shuffleBrands();
+    }
+  }, [remoteBrands.length, shuffleBrands]);
 
   const computeInitialRetailers = () => {
     const baseRetailers = activeRetailers;
@@ -1162,8 +1202,8 @@ export default function App() {
         </div>
 
         {/* Tight Overlapping Organic Cloud */}
-        <div className="max-w-4xl mx-auto px-4 py-8">
-          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-8 sm:gap-x-10 sm:gap-y-12 min-h-[200px]">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-4 sm:gap-x-7 sm:gap-y-6 min-h-[160px]">
             {(randomizedBrands.length > 0 ? randomizedBrands : rawBrands.map(b => ({ ...b, offsetX: 0, offsetY: 0, scale: 1, rotate: 0, zIndex: 1 }))).map((brand, idx) => (
               <div
                 key={`${brand.id}-${idx}`}
@@ -1171,14 +1211,14 @@ export default function App() {
                   transform: `translate(${brand.offsetX}px, ${brand.offsetY}px) scale(${brand.scale}) rotate(${brand.rotate}deg)`,
                   zIndex: brand.zIndex
                 }}
-                className="shrink-0 p-2 sm:p-3 flex items-center justify-center transition-all duration-500 ease-out hover:!scale-135 hover:!z-50 hover:!rotate-0 cursor-pointer"
+                className="shrink-0 p-1 sm:p-1.5 flex items-center justify-center transition-all duration-500 ease-out hover:!scale-135 hover:!z-50 hover:!rotate-0 cursor-pointer"
               >
                 <img
                   src={brand.url}
                   alt={brand.id}
                   loading="eager"
                   decoding="async"
-                  className="h-16 sm:h-22 max-w-[150px] object-contain drop-shadow-sm hover:drop-shadow-xl transition-all"
+                  className="h-14 sm:h-20 max-w-[140px] object-contain drop-shadow-sm hover:drop-shadow-xl transition-all"
                 />
               </div>
             ))}
