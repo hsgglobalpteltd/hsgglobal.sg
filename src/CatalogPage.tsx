@@ -170,15 +170,6 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back</span>
             </button>
-
-            {normalLogo && (
-              <img
-                src={normalLogo}
-                alt="HSG Global"
-                className="h-9 w-auto max-w-[120px] sm:max-w-[150px] object-contain cursor-pointer"
-                onClick={onBack}
-              />
-            )}
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
