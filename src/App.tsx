@@ -39,6 +39,7 @@ import {
 } from './assetsRegistry';
 import { generateExportCatalogPdf, CatalogProduct, BrandInfo } from './catalogPdf';
 import { ChatAssist } from './ChatAssist';
+import { CatalogPage } from './CatalogPage';
 
 // Helper: Convert product image URL into 1:1 450px lightweight thumbnail (~20KB)
 function getSquare450Thumbnail(url?: string): string {
@@ -66,6 +67,46 @@ export default function App() {
   const [products, setProducts] = useState<CatalogProduct[]>([]);
   const [brands, setBrands] = useState<BrandInfo[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
+
+  // Path / Route State for /catalog and Homepage
+  const [currentPage, setCurrentPage] = useState<'home' | 'catalog'>(() => {
+    try {
+      const path = window.location.pathname.toLowerCase();
+      const search = window.location.search.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      if (path.includes('/catalog') || path.includes('main/catalog') || search.includes('page=catalog') || hash.includes('catalog')) {
+        return 'catalog';
+      }
+    } catch {}
+    return 'home';
+  });
+
+  const navigateToCatalog = () => {
+    window.history.pushState({}, '', '/catalog');
+    setCurrentPage('catalog');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const navigateToHome = () => {
+    window.history.pushState({}, '', '/');
+    setCurrentPage('home');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname.toLowerCase();
+      const search = window.location.search.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      if (path.includes('/catalog') || path.includes('main/catalog') || search.includes('page=catalog') || hash.includes('catalog')) {
+        setCurrentPage('catalog');
+      } else {
+        setCurrentPage('home');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Dynamic Layout & Headline Configuration (cached in localStorage to prevent reload glimpse/flicker)
   const [layoutConfig, setLayoutConfig] = useState<any>(() => {
@@ -510,9 +551,14 @@ export default function App() {
         })
       }).catch(() => {});
 
-      // 3. Trigger instant PDF download
+      // 3. Trigger instant PDF download + Unlock Online Catalog
       handleDownloadCatalog(finalName);
       setQuickSuccess(true);
+
+      // Smoothly navigate to full online catalog page after brief unlock feedback
+      setTimeout(() => {
+        navigateToCatalog();
+      }, 500);
     } catch (err: any) {
       setQuickError(err.message || 'Verification failed. Please check your email address.');
     } finally {
@@ -863,6 +909,20 @@ export default function App() {
       el.scrollIntoView({ behavior: 'smooth' });
     }
   };
+
+  // Full Online Catalog Page (/catalog)
+  if (currentPage === 'catalog') {
+    return (
+      <CatalogPage
+        products={products}
+        brands={brands}
+        layoutConfig={layoutConfig}
+        handleDownloadCatalog={handleDownloadCatalog}
+        onBack={navigateToHome}
+        cachedPdfUrl={cachedPdfUrl}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 flex flex-col font-sans selection:bg-[#d4af37]/30 selection:text-amber-900">
@@ -1304,7 +1364,13 @@ export default function App() {
               </button>
 
               <button
-                onClick={() => scrollToSection('lead-form')}
+                onClick={() => {
+                  handleSeeMoreProducts();
+                  setTimeout(() => {
+                    const el = document.getElementById('quick-catalog-form');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }, 50);
+                }}
                 className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 hover:text-amber-900 transition-colors cursor-pointer"
               >
                 <span>Full Catalog</span>
@@ -1423,7 +1489,7 @@ export default function App() {
 
           {/* Big Action Button / Inline Download Form under Product Grid */}
           {!loadingProducts && (
-            <div className="mt-10 text-center flex flex-col items-center justify-center">
+            <div id="quick-catalog-form" className="mt-10 text-center flex flex-col items-center justify-center">
               {visibleRowCount === 1 ? (
                 <button
                   onClick={handleSeeMoreProducts}
@@ -1435,17 +1501,25 @@ export default function App() {
               ) : (
                 <div className="w-full max-w-xl mx-auto">
                   {quickSuccess ? (
-                    <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-4 text-emerald-800 flex items-center justify-between gap-4 shadow-sm animate-fadeIn">
-                      <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold">
+                    <div className="bg-emerald-50 border border-emerald-300 rounded-2xl p-4 text-emerald-800 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm animate-fadeIn">
+                      <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-left">
                         <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                        <span>Catalog PDF downloaded! Email sent to {quickEmail}.</span>
+                        <span>Catalog PDF downloaded &amp; sent to {quickEmail}.</span>
                       </div>
-                      <button
-                        onClick={() => handleDownloadCatalog()}
-                        className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg shrink-0 cursor-pointer"
-                      >
-                        Re-Download
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={navigateToCatalog}
+                          className="text-xs bg-slate-900 hover:bg-black text-white font-bold px-4 py-2 rounded-xl cursor-pointer shadow-sm"
+                        >
+                          Open Online Catalog →
+                        </button>
+                        <button
+                          onClick={() => handleDownloadCatalog()}
+                          className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-2 rounded-xl cursor-pointer"
+                        >
+                          Re-Download
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <form onSubmit={handleQuickDownload} className="flex flex-col sm:flex-row items-stretch gap-2.5 sm:gap-3">
@@ -1468,8 +1542,8 @@ export default function App() {
                           <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                         ) : (
                           <>
-                            <Download className="w-4 h-4 stroke-[2.5]" />
-                            <span>DOWNLOAD CATALOG</span>
+                            <Sparkles className="w-4 h-4 text-[#fef08a]" />
+                            <span>SEE FULL CATALOG</span>
                           </>
                         )}
                       </button>
@@ -1483,14 +1557,14 @@ export default function App() {
                   )}
 
                   <p className="text-[11px] text-slate-500 mt-2.5 flex items-center justify-center gap-1.5 flex-wrap">
-                    <span>Instant PDF download with full carton specs, pallet loading &amp; shelf-life details.</span>
+                    <span>Instant PDF download &amp; direct access to our full brand catalog.</span>
                     <button
                       type="button"
-                      onClick={() => handleDownloadCatalog()}
+                      onClick={navigateToCatalog}
                       className="font-semibold text-amber-700 hover:text-amber-900 underline underline-offset-2 hover:no-underline transition-colors cursor-pointer inline-flex items-center gap-0.5"
-                      title="Direct download catalog without email"
+                      title="Direct access to online catalog"
                     >
-                      (Skip &amp; Download Direct)
+                      (Direct Online Catalog)
                     </button>
                   </p>
                 </div>

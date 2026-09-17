@@ -76,3 +76,14 @@ export function getActiveBrandLogos(): { id: string; url: string; name?: string 
   return logos;
 }
 
+// Brand Cover Image Resolver (Finds actual cover_img from brand data; returns empty if none exists)
+export function getBrandCoverImage(brand: { id?: string; display_name?: string; cover_img?: string; Cover_Image?: string; [key: string]: any }): string {
+  if (brand.cover_img && typeof brand.cover_img === 'string' && brand.cover_img.trim()) return brand.cover_img.trim();
+  if (brand.Cover_Image && typeof brand.Cover_Image === 'string' && brand.Cover_Image.trim()) return brand.Cover_Image.trim();
+  if (brand.cover_image && typeof brand.cover_image === 'string' && brand.cover_image.trim()) return brand.cover_image.trim();
+  if (brand.banner_image && typeof brand.banner_image === 'string' && brand.banner_image.trim()) return brand.banner_image.trim();
+
+  // Return empty string (no fallback to other images or hero images)
+  return '';
+}
+
